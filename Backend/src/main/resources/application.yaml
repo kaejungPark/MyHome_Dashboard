@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: myhome
+  datasource:
+    url: "jdbc:sqlserver://localhost:1433;databaseName=MyHome;encrypt=true;trustServerCertificate=true"
+    username: myhome_app
+    password: ${MYHOME_DB_PASSWORD}
+
+  server:
+    port: 8080
+
