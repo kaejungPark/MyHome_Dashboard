@@ -32,9 +32,7 @@ public interface ExpenseMapper {
         WHERE e.USER_ID = #{userId}
         ORDER BY e.EXPENSE_DATE DESC, e.ID DESC
         """)
-    List<ExpenseResponse> findAllByUserId(
-            @Param("userId") Long userId
-    );
+    List<ExpenseResponse> findAllByUserId(@Param("userId") Long userId);
 
     /**
      * 등록 요청의 카테고리가 실제로 존재하는지 확인한다.
@@ -72,10 +70,7 @@ public interface ExpenseMapper {
             #{request.memo}
         )
         """)
-    int insert(
-            @Param("userId") Long userId,
-            @Param("request") ExpenseCreateRequest request
-    );
+    int insert(@Param("userId") Long userId, @Param("request") ExpenseCreateRequest request);
 
     /**
      * 해당 사용자의 지출만 수정한다.
@@ -94,11 +89,7 @@ public interface ExpenseMapper {
         WHERE ID = #{id}
           AND USER_ID = #{userId}
         """)
-    int update(
-            @Param("id") Long id,
-            @Param("userId") Long userId,
-            @Param("request") ExpenseUpdateRequest request
-    );
+    int update(@Param("id") Long id, @Param("userId") Long userId, @Param("request") ExpenseUpdateRequest request);
 
     // 해당 사용자의 지출만 삭제하고, 삭제된 행 수를 반환한다.
     @Delete("""
@@ -106,8 +97,5 @@ public interface ExpenseMapper {
         WHERE ID = #{id}
           AND USER_ID = #{userId}
         """)
-    int deleteByIdAndUserId(
-            @Param("id") Long id,
-            @Param("userId") Long userId
-    );
+    int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 }

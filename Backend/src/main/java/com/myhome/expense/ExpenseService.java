@@ -52,7 +52,7 @@ public class ExpenseService {
         int insertedRows = expenseMapper.insert(userId, request);
 
         if (insertedRows != 1) {
-            throw new IllegalStateException("지출 등록 행 수가 올바르지 않습니다.");
+            throw new IllegalStateException("등록 중 오류가 발생하였습니다.");
         }
     }
 
@@ -64,7 +64,7 @@ public class ExpenseService {
     public void updateExpense(Long id, ExpenseUpdateRequest request) {
         if (id <= 0) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "올바르지 않은 지출 ID입니다."
+                    HttpStatus.BAD_REQUEST, "수정 중 오류가 발생하였습니다."
             );
         }
 
@@ -78,12 +78,12 @@ public class ExpenseService {
 
         if (updatedRows == 0) {
             throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "지출을 찾을 수 없습니다."
+                    HttpStatus.NOT_FOUND, "지출 수정중 오류가 발생하였습니다."
             );
         }
 
         if (updatedRows != 1) {
-            throw new IllegalStateException("지출 수정 행 수가 올바르지 않습니다.");
+            throw new IllegalStateException("지출 수정중 오류가 발생하였습니다.");
         }
     }
 
@@ -95,7 +95,7 @@ public class ExpenseService {
     public void deleteExpense(Long id) {
         if (id <= 0) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "올바르지 않은 지출 ID입니다."
+                    HttpStatus.BAD_REQUEST, "올바르지 않은 ID입니다."
             );
         }
 
@@ -103,12 +103,12 @@ public class ExpenseService {
 
         if (deletedRows == 0) {
             throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "지출을 찾을 수 없습니다."
+                    HttpStatus.NOT_FOUND, "지출 삭제 중 오류가 발생하였습니다."
             );
         }
 
         if (deletedRows != 1) {
-            throw new IllegalStateException("지출 삭제 행 수가 올바르지 않습니다.");
+            throw new IllegalStateException("지출 삭제 중 오류가 발생하였습니다.");
         }
     }
 }

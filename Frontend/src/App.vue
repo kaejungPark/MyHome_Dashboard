@@ -8,6 +8,7 @@ const menus = [
   { path: '/schedules', label: '일정' },
   { path: '/items', label: '물품' },
   { path: '/statistics', label: '통계' },
+  { path: '/budgets', label: '월별 예산' },
 ]
 </script>
 

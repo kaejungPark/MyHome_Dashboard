@@ -27,6 +27,7 @@ public class ExpenseController {
         this.expenseService = expenseService;
     }
 
+    /** 현재 로그인 기능이 없기에 파라미터에 userId를 받지 않고 작업 추후 추가 예정 Get, Post  */
     // GET /api/expenses: 사용자별 지출 목록 조회
     @GetMapping
     public ApiResponse<List<ExpenseResponse>> getExpenses() {
@@ -35,39 +36,28 @@ public class ExpenseController {
 
     /**
      * POST /api/expenses: 지출 등록
-     * @Valid로 요청값을 검증하고, 등록 성공 시 HTTP 201을 반환한다.
      */
     @PostMapping
-    public ResponseEntity<ApiResponse<Void>> createExpense(
-            @Valid @RequestBody ExpenseCreateRequest request
-    ) {
+    public ResponseEntity<ApiResponse<Void>> createExpense(@Valid @RequestBody ExpenseCreateRequest request) {
         expenseService.createExpense(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.<Void>success(null));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<Void>success(null));
     }
 
     /**
      * PUT /api/expenses/{id}: 지출 수정
-     * 요청 본문을 검증하고 성공 시 HTTP 200을 반환한다.
      */
     @PutMapping("/{id}")
-    public ApiResponse<Void> updateExpense(
-            @PathVariable("id") Long id,
-            @Valid @RequestBody ExpenseUpdateRequest request
-    ) {
+    public ApiResponse<Void> updateExpense(@PathVariable("id") Long id, @Valid @RequestBody ExpenseUpdateRequest request) {
         expenseService.updateExpense(id, request);
         return ApiResponse.<Void>success(null);
     }
 
     /**
      * DELETE /api/expenses/{id}: 지출 삭제
-     * 성공 시 HTTP 200과 공통 응답을 반환한다.
      */
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> deleteExpense(
-            @PathVariable("id") Long id
-    ) {
+    public ApiResponse<Void> deleteExpense(@PathVariable("id") Long id) {
         expenseService.deleteExpense(id);
         return ApiResponse.<Void>success(null);
     }
