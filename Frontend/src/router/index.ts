@@ -39,6 +39,11 @@ const router = createRouter({
       name: 'not-found',
       component: () => import('../views/NotFoundView.vue'),
     },
+    {
+      path: '/expenses',
+      name: 'expenses',
+      component: () => import('../views/ExpenseView.vue'),
+    },
   ],
 
   // 페이지 이동 시 화면 위쪽부터 표시한다.

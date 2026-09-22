@@ -6,6 +6,9 @@ spring:
     username: myhome_app
     password: ${MYHOME_DB_PASSWORD}
 
-  server:
-    port: 8080
+server:
+  port: 8080
 
+# 로그인 기능 도입 전까지 사용할 단일 개발 사용자 ID
+app:
+  user-id: 8
