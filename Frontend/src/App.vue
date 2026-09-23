@@ -9,6 +9,7 @@ const menus = [
   { path: '/items', label: '물품' },
   { path: '/statistics', label: '통계' },
   { path: '/budgets', label: '월별 예산' },
+  { path: '/recurring-expenses', label: '고정 지출' },
 ]
 </script>
 

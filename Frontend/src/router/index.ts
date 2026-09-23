@@ -49,6 +49,11 @@ const router = createRouter({
       name: 'budgets',
       component: () => import('../views/BudgetView.vue'),
     },
+    {
+      path: '/recurring-expenses',
+      name: 'recurring-expenses',
+      component: () => import('../views/RecurringExpenseView.vue'),
+    },
   ],
 
   // 페이지 이동 시 화면 위쪽부터 표시한다.
