@@ -1,36 +1,41 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 
+// 백엔드 공통 응답 형식이다.
+// T는 각 API가 반환하는 데이터의 타입이다.
 interface ApiResponse<T> {
-  success: boolean
-  data: T | null
-  message: string | null
+  success: boolean // 요청 성공 여부
+  data: T | null // 응답 데이터
+  message: string | null // 오류 안내 메시지
 }
 
+// 카테고리 선택 목록에서 사용하는 데이터다.
 interface Category {
-  id: number
-  name: string
+  id: number // 카테고리 ID
+  name: string // 카테고리명
 }
 
+// 지출 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Expense {
-  id: number
-  categoryId: number // 수정 폼에서 기존 카테고리를 선택하는 데 사용
-  categoryName: string
-  amount: number
-  expenseDate: string
-  expenseType: string
-  paymentMethod: string | null
-  title: string
-  memo: string | null
+  id: number // 지출 ID
+  categoryId: number // 카테고리 ID: 수정 시 기존 항목 선택에 사용
+  categoryName: string // 카테고리명
+  amount: number // 실제 지출 금액
+  expenseDate: string // 지출일: YYYY-MM-DD
+  expenseType: string // 지출 유형: FIXED(고정), VARIABLE(변동)
+  paymentMethod: string | null // 결제 수단
+  title: string // 지출 제목
+  memo: string | null // 메모
 }
 
-const categories = ref<Category[]>([])
-const expenses = ref<Expense[]>([])
-const loading = ref(false)
-const saving = ref(false)
-const errorMessage = ref('')
-const notice = ref('')
-const editingId = ref<number | null>(null)
+// 조회 결과와 화면 처리 상태를 관리한다.
+const categories = ref<Category[]>([]) // 선택 가능한 카테고리 목록
+const expenses = ref<Expense[]>([]) // 조회한 지출 목록
+const loading = ref(false) // 조회 중 여부
+const saving = ref(false) // 저장·삭제 처리 중 여부
+const errorMessage = ref('') // 오류 메시지
+const notice = ref('') // 처리 완료 메시지
+const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
 
 // UTC 변환으로 날짜가 달라지지 않도록 로컬 날짜를 사용한다.
 function today() {
@@ -42,6 +47,7 @@ function today() {
   ].join('-')
 }
 
+// 신규 등록과 수정 취소에 사용할 기본 입력값을 생성한다.
 function initialForm() {
   return {
     categoryId: '',
@@ -54,6 +60,7 @@ function initialForm() {
   }
 }
 
+// 폼 입력값을 화면과 동기화한다.
 const form = reactive(initialForm())
 
 // HTTP 상태와 서버의 공통 응답을 함께 확인한다.
@@ -68,6 +75,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T | null>
   return result.data
 }
 
+// 오류 원인은 개발자 도구에 기록하고, 화면에는 안내 메시지를 표시한다.
 function showError(error: unknown) {
   console.error(error)
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
@@ -141,6 +149,7 @@ async function saveExpense() {
   }
 }
 
+// 수정 상태를 해제하고 입력값을 신규 등록 상태로 되돌린다.
 function resetForm() {
   editingId.value = null
   Object.assign(form, initialForm())
@@ -192,6 +201,7 @@ async function deleteExpense(expense: Expense) {
   }
 }
 
+// 화면이 처음 표시되면 카테고리와 지출 목록을 조회한다.
 onMounted(loadData)
 </script>
 

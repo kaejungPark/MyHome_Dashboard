@@ -3,15 +3,15 @@ import { onMounted, reactive, ref } from 'vue'
 
 // 백엔드 공통 응답 형식이다.
 interface ApiResponse<T> {
-  success: boolean
-  data: T | null
-  message: string | null
+  success: boolean // 요청 성공 여부
+  data: T | null // 응답 데이터
+  message: string | null // 오류 안내 메시지
 }
 
 // 카테고리 선택 목록이다.
 interface Category {
-  id: number
-  name: string
+  id: number // 카테고리 ID
+  name: string // 카테고리명
 }
 
 // 등록된 고정 지출 정보다.
@@ -31,31 +31,32 @@ interface RecurringExpense {
 
 // 선택한 월에 납부할 항목이다.
 interface MonthlyPaymentItem {
-  id: number
-  categoryId: number
-  categoryName: string
-  title: string
-  amount: number
+  id: number // 고정 지출 ID
+  categoryId: number // 카테고리 ID
+  categoryName: string // 카테고리명
+  title: string // 항목명
+  amount: number // 납부 예정 금액
   paymentDate: string // 말일 보정이 적용된 납부 예정일
-  paymentMethod: string | null
+  paymentMethod: string | null // 결제 수단
 }
 
 // 월별 납부 예정 목록과 합계다.
 interface MonthlyPayment {
-  month: string
-  totalAmount: number
-  items: MonthlyPaymentItem[]
+  month: string // 조회 월: YYYY-MM
+  totalAmount: number // 해당 월의 납부 예정 금액 합계
+  items: MonthlyPaymentItem[] // 해당 월에 적용되는 활성 항목 목록
 }
 
-const baseUrl = '/api/recurring-expenses'
-const categories = ref<Category[]>([])
-const expenses = ref<RecurringExpense[]>([])
-const monthly = ref<MonthlyPayment | null>(null)
-const editingId = ref<number | null>(null)
-const busy = ref(false) // 처리 중 중복 요청과 입력을 막는다.
-const ready = ref(false) // 관리 목록 조회에 성공했는지 나타낸다.
-const errorMessage = ref('')
-const notice = ref('')
+// API 주소와 화면에서 사용하는 데이터를 관리한다.
+const baseUrl = '/api/recurring-expenses' // 고정 지출 API 공통 주소
+const categories = ref<Category[]>([]) // 카테고리 선택 목록
+const expenses = ref<RecurringExpense[]>([]) // 활성·비활성을 포함한 관리 목록
+const monthly = ref<MonthlyPayment | null>(null) // 월별 예정 목록과 합계
+const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
+const busy = ref(false) // 조회·저장·삭제 처리 중 여부
+const ready = ref(false) // 관리 목록 조회 성공 여부
+const errorMessage = ref('') // 오류 메시지
+const notice = ref('') // 처리 완료 메시지
 
 // UTC 변환 없이 사용자 PC 기준 현재 월을 구한다.
 function currentMonth() {
@@ -63,6 +64,7 @@ function currentMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
+// 납부 예정 현황을 조회할 월이다. 처음에는 현재 월을 선택한다.
 const selectedMonth = ref(currentMonth())
 
 // 신규 등록 폼의 기본값이다.
@@ -80,6 +82,7 @@ function initialForm() {
   }
 }
 
+// 등록·수정 폼의 입력값을 화면과 동기화한다.
 const form = reactive(initialForm())
 
 // HTTP 상태와 공통 응답을 함께 확인한다.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// 존재하지 않는 주소에서 홈으로 돌아가는 링크에 사용한다.
 import { RouterLink } from 'vue-router'
 </script>
 
