@@ -25,6 +25,11 @@ public class RecurringExpenseService {
         this.userId = userId;
     }
 
+    /**
+     * 현재 사용자의 고정 지출 관리 목록을 조회한다.
+     * 수정하거나 다시 활성화할 수 있도록 비활성 항목도 포함한다.
+     * 월별 적용 기간 필터링은 납부 예정 조회에서 별도로 수행한다.
+     */
     @Transactional(readOnly = true)
     public List<RecurringExpenseResponse> getRecurringExpense() {
         return recurringExpenseMapper.findeRecurringExpense(userId);
@@ -37,6 +42,8 @@ public class RecurringExpenseService {
     @Transactional
     public void createRecurringExpense(@Valid RecurringExpenseSaveRequest request) {
 
+        // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
+        // 종료 월이 없으면 null을 유지한다.
         LocalDate startMonth = parseMonth(request.startMonth());
         LocalDate endMonth = request.endMonth() == null
                 ? null
@@ -70,6 +77,8 @@ public class RecurringExpenseService {
             );
         }
 
+        // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
+        // 종료 월이 없으면 null을 유지한다.
         LocalDate startMonth = parseMonth(request.startMonth());
         LocalDate endMonth = request.endMonth() == null
                 ? null

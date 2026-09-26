@@ -16,6 +16,7 @@ public class ExpenseService {
 
     private final ExpenseMapper expenseMapper;
     private final CategoryMapper categoryMapper;
+    // 로그인 기능 도입 전까지 app.user-id 설정으로 사용하는 개발용 사용자 ID다.
     private final Long userId;
 
     public ExpenseService(

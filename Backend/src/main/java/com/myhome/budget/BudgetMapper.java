@@ -21,7 +21,8 @@ public interface BudgetMapper {
     BigDecimal findAmount(@Param("userId")  Long userId, @Param("monthStart")LocalDate localDate);
 
     /**
-     * 이번 달 1일 이상, 다음 달 1일 미만의 지출을 합산한다.
+     * 조회할 월의 1일 이상, 다음 달 1일 미만인 실제 지출을 합산한다.
+     * 사용자 ID로 조회 범위를 제한하고, 지출이 없으면 0을 반환한다.
      */
     @Select("""
         SELECT COALESCE(SUM(AMOUNT), 0)

@@ -38,8 +38,10 @@ public interface RecurringExpenseMapper {
     List<RecurringExpenseResponse> findeRecurringExpense(@Param("userId") Long userId);
 
     /**
-     * 고정 지출을 등록하고 저장된 행 수를 반환한다.
-     * 생성·수정 일시는 DB의 기본값을 사용한다.
+     * 현재 사용자의 고정 지출을 등록하고 저장된 행 수를 반환한다.
+     * 시작·종료 월은 Service에서 변환한 LocalDate를 사용한다.
+     * 종료 월이 null이어도 날짜 타입으로 전달되도록 jdbcType=DATE를 지정한다.
+     * 생성 일시는 SQL에서 지정하고, 수정 일시는 DB 기본값을 사용한다.
      */
     @Insert("""
        INSERT INTO dbo.RECURRING_EXPENSE (
@@ -77,8 +79,9 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 고정 지출을 수정하고 저장된 행 수를 반환한다.
-     * 생성·수정 일시는 DB의 기본값을 사용한다.
+     * ID와 사용자 ID가 모두 일치하는 고정 지출을 수정한다.
+     * 생성 일시는 유지하고 수정 일시만 현재 UTC 시각으로 갱신한다.
+     * 수정된 행 수를 반환한다.
      */
     @Update("""
         UPDATE dbo.RECURRING_EXPENSE

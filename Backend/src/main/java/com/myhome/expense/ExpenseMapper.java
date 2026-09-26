@@ -52,7 +52,7 @@ public interface ExpenseMapper {
         INSERT INTO dbo.EXPENSE (
             USER_ID,
             CATEGORY_ID,
-            AMOUNT,2
+            AMOUNT,
             EXPENSE_DATE,
             EXPENSE_TYPE,
             PAYMENT_METHOD,

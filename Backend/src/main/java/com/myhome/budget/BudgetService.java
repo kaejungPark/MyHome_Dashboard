@@ -16,6 +16,7 @@ import java.time.format.DateTimeParseException;
 public class BudgetService {
 
     private final BudgetMapper budgetMapper;
+    // 로그인 기능 도입 전까지 app.user-id 설정으로 사용하는 개발용 사용자 ID다.
     private final Long userId;
 
     public BudgetService(BudgetMapper budgetMapper, @Value("${app.user-id}") Long userId) {
@@ -84,6 +85,11 @@ public class BudgetService {
         }
     }
 
+    /**
+     * 현재 사용자의 해당 월 예산 금액을 수정한다.
+     * 수정 대상은 사용자 ID와 예산 월로 식별한다.
+     * 등록된 예산이 없으면 404를 반환한다.
+     */
     @Transactional
     public void updateBudget(String monthText, BudgetUpdateRequest request) {
         // 수정할 예산의 월을 검증하고 해당 월 1일로 변환한다.
@@ -106,6 +112,11 @@ public class BudgetService {
         }
     }
 
+    /**
+     * 현재 사용자의 해당 월 예산을 삭제한다.
+     * 등록된 예산이 없으면 404를 반환한다.
+     * 실제 지출 내역은 삭제하지 않는다.
+     */
     @Transactional
     public void deleteBudget(String monthText) {
         YearMonth month = parseMonth(monthText);

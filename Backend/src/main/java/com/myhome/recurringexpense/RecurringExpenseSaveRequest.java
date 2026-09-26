@@ -4,6 +4,11 @@ import jakarta.validation.constraints.*;
 
 import java.math.BigDecimal;
 
+/**
+ * 고정 지출 등록·수정에서 공통으로 사용하는 요청 데이터다.
+ * 필수값·금액·납부일·문자열 형식을 검증한다.
+ * 시작 월과 종료 월의 순서 검증은 Service에서 처리한다.
+ */
 public record RecurringExpenseSaveRequest(
         // 지출 카테고리 ID
         @NotNull(message = "카테고리는 필수입니다.")
