@@ -64,7 +64,10 @@ public interface BudgetMapper {
         """)
     int update(@Param("userId") Long userId,@Param("monthStart") LocalDate monthStart,@Param("amount") BigDecimal amount);
 
-    // 해당 사용자의 지출만 삭제하고, 삭제된 행 수를 반환한다.
+    /**
+     * 사용자 ID와 예산 월에 해당하는 예산을 삭제한다.
+     * 삭제된 행 수를 반환하며, 실제 지출 내역은 유지한다.
+     */
     @Delete("""
         DELETE FROM dbo.MONTHLY_BUDGET
         WHERE USER_ID = #{userId}

@@ -60,6 +60,7 @@ public class RecurringExpenseService {
                 userId, request, startMonth, endMonth
         );
 
+        // 정상 등록은 1행이다. 다른 결과이면 예외를 발생시켜 롤백한다.
         if (insertRow != 1) {
             throw new IllegalStateException("등록 행 수가 올바르지 않습니다.");
         }
@@ -95,6 +96,7 @@ public class RecurringExpenseService {
                 id, userId, request, startMonth, endMonth
         );
 
+        // ID와 사용자 ID 조건에 맞는 대상이 없으면 404를 반환한다.
         if (updatedRows == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "고정 지출 수정중 오류가 발생하였습니다."
