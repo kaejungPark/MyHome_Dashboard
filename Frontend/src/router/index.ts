@@ -18,8 +18,7 @@ const router = createRouter({
     {
       path: '/schedules',
       name: 'schedules',
-      component: () => import('../views/ComingSoonView.vue'),
-      props: { title: '일정' },
+      component: () => import('../views/ScheduleView.vue'),
     },
     {
       path: '/items',
