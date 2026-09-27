@@ -174,7 +174,7 @@ function startEdit(expense: Expense) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// 확인을 받은 뒤 삭제한다. 처리 중 중복 요청을 막는다.
+// 지출 삭제. 처리 중 중복 요청을 막는다.
 async function deleteExpense(expense: Expense) {
   if (saving.value || loading.value) return
   if (!window.confirm(`"${expense.title}" 지출을 삭제하시겠습니까?`)) return
