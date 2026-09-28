@@ -1,5 +1,6 @@
 package com.myhome.recurringexpense;
 
+import com.myhome.common.validation.DateValidator;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,8 @@ public class RecurringExpenseService {
 
     private final RecurringExpenseMapper recurringExpenseMapper;
     private final Long userId;
+    private static final String DATE_RANGE_MESSAGE = "종료 월은 시작 월 이후여야 합니다.";
+
 
     public RecurringExpenseService(RecurringExpenseMapper recurringExpenseMapper, @Value("${app.user-id}") Long userId) {
         this.recurringExpenseMapper = recurringExpenseMapper;
@@ -50,11 +53,7 @@ public class RecurringExpenseService {
                 : parseMonth(request.endMonth());
 
         // 종료 월은 시작 월보다 빠를 수 없다.
-        if (endMonth != null && endMonth.isBefore(startMonth)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "종료 월은 시작 월 이후여야 합니다."
-            );
-        }
+        DateValidator.validateDateRange(startMonth, endMonth, DATE_RANGE_MESSAGE);
 
         int insertRow = recurringExpenseMapper.insert(
                 userId, request, startMonth, endMonth
@@ -85,12 +84,9 @@ public class RecurringExpenseService {
                 ? null
                 : parseMonth(request.endMonth());
 
+
         // 종료 월은 시작 월보다 빠를 수 없다.
-        if (endMonth != null && endMonth.isBefore(startMonth)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "종료 월은 시작 월 이후여야 합니다."
-            );
-        }
+        DateValidator.validateDateRange(startMonth, endMonth, DATE_RANGE_MESSAGE);
 
         int updatedRows = recurringExpenseMapper.update(
                 id, userId, request, startMonth, endMonth

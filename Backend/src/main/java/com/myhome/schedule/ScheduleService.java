@@ -1,5 +1,6 @@
 package com.myhome.schedule;
 
+import com.myhome.common.validation.DateValidator;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,7 @@ public class ScheduleService {
 
     private final ScheduleMapper scheduleMapper;
     private final Long userId;
+    private static final String DATE_RANGE_MESSAGE = "마감일은 시작일보다 빠를 수 없습니다.";
 
     public ScheduleService(ScheduleMapper scheduleMapper, @Value("${app.user-id}") Long userId) {
         this.scheduleMapper = scheduleMapper;
@@ -37,7 +39,7 @@ public class ScheduleService {
     public void createSchedule(ScheduleSaveRequest request) {
 
         // 저장 전에 시작일과 마감일의 순서를 검증한다.
-        validateDates(request.startDate(), request.dueDate());
+        DateValidator.validateDateRange(request.startDate(), request.dueDate(), DATE_RANGE_MESSAGE);
 
         int insertRow = scheduleMapper.insert(userId, request);
 
@@ -61,7 +63,8 @@ public class ScheduleService {
             );
         }
 
-        validateDates(request.startDate(), request.dueDate());
+        // 저장 전에 시작일과 마감일의 순서를 검증한다.
+        DateValidator.validateDateRange(request.startDate(), request.dueDate(), DATE_RANGE_MESSAGE);
 
         int updateRow =  scheduleMapper.update(id, userId, request);
 
@@ -76,19 +79,6 @@ public class ScheduleService {
         }
     }
 
-    /**
-     * 마감일이 시작일보다 빠른지 검증한다.
-     * 시작일과 마감일이 같은 경우는 허용한다.
-     */
-    private void validateDates(LocalDate startDate, LocalDate dueDate) {
-        if (dueDate.isBefore(startDate)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "마감일은 시작일보다 빠를 수 없습니다."
-            );
-        }
-    }
-
 
     /**
      * 일정을 삭제한다.
@@ -98,7 +88,7 @@ public class ScheduleService {
     public void deleteSchedule(Long id) {
         if (id <= 0) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "올바르지 않은 ID입니다."
+                    HttpStatus.BAD_REQUEST, "삭제 중 오류가 발생하였습니다."
             );
         }
 
