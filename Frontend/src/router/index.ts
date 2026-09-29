@@ -28,8 +28,7 @@ const router = createRouter({
     {
       path: '/statistics',
       name: 'statistics',
-      component: () => import('../views/ComingSoonView.vue'),
-      props: { title: '통계' },
+      component: () => import('../views/StatisticsView.vue'),
     },
     {
       // 등록된 경로와 일치하지 않는 주소는 404 화면으로 연결한다.

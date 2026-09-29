@@ -1,6 +1,7 @@
 package com.myhome.recurringexpense;
 
 import com.myhome.common.validation.DateValidator;
+import com.myhome.common.validation.MonthValidator;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -47,10 +48,10 @@ public class RecurringExpenseService {
 
         // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
         // 종료 월이 없으면 null을 유지한다.
-        LocalDate startMonth = parseMonth(request.startMonth());
+        LocalDate startMonth = MonthValidator.parseMonth(request.startMonth()).atDay(1);
         LocalDate endMonth = request.endMonth() == null
                 ? null
-                : parseMonth(request.endMonth());
+                : MonthValidator.parseMonth(request.endMonth()).atDay(1);
 
         // 종료 월은 시작 월보다 빠를 수 없다.
         DateValidator.validateDateRange(startMonth, endMonth, DATE_RANGE_MESSAGE);
@@ -79,10 +80,10 @@ public class RecurringExpenseService {
 
         // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
         // 종료 월이 없으면 null을 유지한다.
-        LocalDate startMonth = parseMonth(request.startMonth());
+        LocalDate startMonth = MonthValidator.parseMonth(request.startMonth()).atDay(1);
         LocalDate endMonth = request.endMonth() == null
                 ? null
-                : parseMonth(request.endMonth());
+                : MonthValidator.parseMonth(request.endMonth()).atDay(1);
 
 
         // 종료 월은 시작 월보다 빠를 수 없다.
@@ -138,7 +139,7 @@ public class RecurringExpenseService {
     @Transactional(readOnly = true)
     public MonthlyResponse getMonthlyExpenses(String monthText) {
         // 기존 월 검증 함수를 사용해 조회 월을 검증한다.
-        LocalDate monthStart = parseMonth(monthText);
+        LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
         YearMonth targetMonth = YearMonth.from(monthStart);
 
         // 현재 사용자의 고정 지출 목록을 조회한다.
@@ -205,28 +206,4 @@ public class RecurringExpenseService {
         );
     }
 
-    // YYYY-MM 문자열을 해당 월의 1일로 변환한다.
-    private LocalDate parseMonth(String value) {
-        if (value == null || !value.matches("[0-9]{4}-(0[1-9]|1[0-2])")) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "월은 YYYY-MM 형식이어야 합니다."
-            );
-        }
-
-        try {
-            YearMonth month = YearMonth.parse(value);
-
-            if (month.getYear() < 1 || month.getYear() > 9998) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST, "지원하지 않는 연도입니다."
-                );
-            }
-
-            return month.atDay(1);
-        } catch (DateTimeParseException ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "올바르지 않은 월입니다.", ex
-            );
-        }
-    }
 }

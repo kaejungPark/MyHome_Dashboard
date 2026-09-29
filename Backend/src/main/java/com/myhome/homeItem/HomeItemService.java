@@ -16,7 +16,7 @@ public class HomeItemService {
     private final Long userId;
     private static final String DATE_RANGE_MESSAGE = "구매일은 보증 종료일보다 빠를 수 없습니다.";
 
-    public HomeItemService(HomeItemMapper homeItemMapper, @Value("${app.user--id}") Long userId) {
+    public HomeItemService(HomeItemMapper homeItemMapper, @Value("${app.user-id}") Long userId) {
         this.homeItemMapper = homeItemMapper;
         this.userId = userId;
     }

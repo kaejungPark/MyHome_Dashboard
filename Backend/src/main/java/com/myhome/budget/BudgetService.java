@@ -1,5 +1,6 @@
 package com.myhome.budget;
 
+import com.myhome.common.validation.MonthValidator;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
@@ -27,7 +28,7 @@ public class BudgetService {
     /** 월 예산과 지출 합계를 조회해 잔여 금액을 계산한다. */
     @Transactional(readOnly = true)
     public BudgetResponse getBudget(String monthText) {
-        YearMonth month = parseMonth(monthText);
+        YearMonth month = MonthValidator.parseMonth(monthText);
         BigDecimal budget = budgetMapper.findAmount(userId, month.atDay(1)); // BigDecimal 금액을 소수점 오차 없이 계산 하기 위해 사용, atDay 그 달의 첫째날을 가져오기 위해 사용
         BigDecimal spent = budgetMapper.sumExpenses(userId, month.atDay(1), month.plusMonths(1).atDay(1));
 
@@ -36,34 +37,13 @@ public class BudgetService {
 
     }
 
-    // 입력 형식과 SQL Server DATE 범위, 다음 달 계산 가능 여부를 검증한다.
-    private YearMonth parseMonth(String value) {
-        if(value == null || !value.matches("[0-9]{4}-[0-9]{2}")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "월은 yyyy-MM 형식이어야 합니다.");
-        }
-
-        try {
-            YearMonth month = YearMonth.parse(value);
-
-            if (month.getYear() < 1  || month.getYear() > 9999) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "지원하지 않는 연도입니다.");
-            }
-
-            return month;
-        } catch (DateTimeParseException ex) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "올바르지 않은 월입니다."
-            );
-        }
-    }
-
     /**
      * 월 예산을 등록한다.
      * 사용자·월 중복은 DB의 UNIQUE 제약 조건으로 최종 차단한다.
      */
     @Transactional
     public void createBudget(String monthText, BudgetCreateRequest request) {
-        YearMonth month = parseMonth(monthText);
+        YearMonth month = MonthValidator.parseMonth(monthText);
 
         try {
             int insertedRow = budgetMapper.insert(
@@ -93,7 +73,7 @@ public class BudgetService {
     @Transactional
     public void updateBudget(String monthText, BudgetUpdateRequest request) {
         // 수정할 예산의 월을 검증하고 해당 월 1일로 변환한다.
-        YearMonth month = parseMonth(monthText);
+        YearMonth month = MonthValidator.parseMonth(monthText);
 
         int updatedRows = budgetMapper.update(
                 userId,
@@ -119,7 +99,7 @@ public class BudgetService {
      */
     @Transactional
     public void deleteBudget(String monthText) {
-        YearMonth month = parseMonth(monthText);
+        YearMonth month = MonthValidator.parseMonth(monthText);
 
         int deletedRows = budgetMapper.delete(userId, month.atDay(1));
 
