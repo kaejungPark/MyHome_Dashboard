@@ -1,0 +1,459 @@
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { request } from '../api/client'
+
+// 물품 상태에 사용할 수 있는 값이다.
+type HomeItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
+
+// 물품 목록 조회와 수정 폼에서 사용하는 데이터다.
+interface HomeItem {
+  id: number // 물품 ID
+  name: string // 물품명
+  category: string | null // 분류
+  purchaseDate: string | null // 구매일
+  purchasePrice: number | null // 구매 금액
+  warrantyEndDate: string | null // 보증 종료일
+  maintenanceCycle: number | null // 관리 주기: 일 단위
+  status: HomeItemStatus // 물품 상태
+  memo: string | null // 메모
+}
+
+// 조회 결과와 화면 처리 상태를 관리한다.
+const homeItems = ref<HomeItem[]>([])
+const loading = ref(false) // 조회 중 여부
+const saving = ref(false) // 저장·삭제 처리 중 여부
+const editingId = ref<number | null>(null) // null이면 신규 등록
+const errorMessage = ref('') // 오류 메시지
+const notice = ref('') // 처리 완료 메시지
+
+const baseUrl = '/api/home-item'
+
+// 선택 입력은 빈 문자열로 초기화하고, 저장할 때 null로 변환한다.
+function initialForm() {
+  return {
+    name: '',
+    category: '',
+    purchaseDate: '',
+    purchasePrice: '',
+    warrantyEndDate: '',
+    maintenanceCycle: '',
+    status: 'IN_USE' as HomeItemStatus,
+    memo: '',
+  }
+}
+
+// 폼 입력값을 화면과 동기화한다.
+const form = reactive(initialForm())
+
+// 서버의 상태 코드를 화면에 표시할 한글 명칭으로 변환한다.
+function statusLabel(status: HomeItemStatus): string {
+  switch (status) {
+    case 'IN_USE':
+      return '사용 중'
+    case 'STORED':
+      return '보관 중'
+    case 'DISPOSED':
+      return '처분'
+    default:
+      return status
+  }
+}
+
+// 오류를 개발자 도구에 기록하고 화면에 안내 메시지를 표시한다.
+function showError(error: unknown) {
+  console.error(error)
+  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
+}
+
+// 현재 사용자의 물품 목록을 조회한다.
+async function loadData() {
+  if (loading.value) return
+
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const data = await request<HomeItem[]>(baseUrl)
+    homeItems.value = data ?? []
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 수정 상태를 해제하고 신규 등록 폼으로 되돌린다.
+function resetForm() {
+  editingId.value = null
+  Object.assign(form, initialForm())
+}
+
+// 선택한 물품을 수정 폼에 채운다.
+// 서버의 null 값은 입력란에서 사용할 빈 문자열로 변환한다.
+function startEdit(item: HomeItem) {
+  if (saving.value || loading.value) return
+
+  editingId.value = item.id
+  errorMessage.value = ''
+  notice.value = ''
+
+  Object.assign(form, {
+    name: item.name,
+    category: item.category ?? '',
+    purchaseDate: item.purchaseDate ?? '',
+    purchasePrice: item.purchasePrice === null ? '' : String(item.purchasePrice),
+    warrantyEndDate: item.warrantyEndDate ?? '',
+    maintenanceCycle: item.maintenanceCycle === null ? '' : String(item.maintenanceCycle),
+    status: item.status,
+    memo: item.memo ?? '',
+  })
+
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+// 신규 등록은 POST, 기존 물품 수정은 PUT으로 저장한다.
+async function saveHomeItem() {
+  if (saving.value || loading.value) return
+
+  errorMessage.value = ''
+  notice.value = ''
+
+  // 선택 입력인 숫자는 빈칸과 0을 구분한다.
+  const priceText = form.purchasePrice.trim()
+  const cycleText = form.maintenanceCycle.trim()
+  const purchasePrice = priceText === '' ? null : Number(priceText)
+  const maintenanceCycle = cycleText === '' ? null : Number(cycleText)
+
+  // 물품명과 상태는 필수 입력이다.
+  if (!form.name.trim() || !['IN_USE', 'STORED', 'DISPOSED'].includes(form.status)) {
+    errorMessage.value = '물품명과 상태를 확인해 주세요.'
+    return
+  }
+
+  // 화면에서는 구매 금액을 원 단위 정수로 입력받는다.
+  if (purchasePrice !== null && (!Number.isSafeInteger(purchasePrice) || purchasePrice < 0)) {
+    errorMessage.value = '구매 금액은 0 이상의 정수로 입력해 주세요.'
+    return
+  }
+
+  // 관리 주기는 DB의 INT 범위 안에서 1일 이상이어야 한다.
+  if (
+    maintenanceCycle !== null &&
+    (!Number.isInteger(maintenanceCycle) || maintenanceCycle < 1 || maintenanceCycle > 2147483647)
+  ) {
+    errorMessage.value = '관리 주기는 1~2147483647 사이의 정수로 입력해 주세요.'
+    return
+  }
+
+  // 두 날짜가 모두 입력된 경우에만 순서를 검사한다.
+  // 날짜 입력값은 YYYY-MM-DD 형식이므로 문자열로 비교할 수 있다.
+  if (form.purchaseDate && form.warrantyEndDate && form.warrantyEndDate < form.purchaseDate) {
+    errorMessage.value = '보증 종료일은 구매일보다 빠를 수 없습니다.'
+    return
+  }
+
+  const id = editingId.value
+  saving.value = true
+
+  try {
+    await request<null>(id === null ? baseUrl : `${baseUrl}/${id}`, {
+      method: id === null ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: form.name.trim(),
+        category: form.category.trim() || null,
+        purchaseDate: form.purchaseDate || null,
+        purchasePrice,
+        warrantyEndDate: form.warrantyEndDate || null,
+        maintenanceCycle,
+        status: form.status,
+        memo: form.memo.trim() || null,
+      }),
+    })
+
+    // 저장 성공 후 폼을 초기화하고 최신 목록을 조회한다.
+    resetForm()
+    notice.value = id === null ? '등록됐습니다.' : '수정됐습니다.'
+    await loadData()
+  } catch (error: unknown) {
+    // 저장 요청이 실패하면 입력 내용을 유지한다.
+    showError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 사용자 확인 후 물품을 삭제하고 목록을 갱신한다.
+async function deleteHomeItem(item: HomeItem) {
+  if (saving.value || loading.value) return
+  if (!window.confirm(`"${item.name}" 물품을 삭제하시겠습니까?`)) return
+
+  saving.value = true
+  errorMessage.value = ''
+  notice.value = ''
+
+  try {
+    await request<null>(`${baseUrl}/${item.id}`, {
+      method: 'DELETE',
+    })
+
+    // 수정 중인 물품을 삭제했다면 수정 상태도 해제한다.
+    if (editingId.value === item.id) {
+      resetForm()
+    }
+
+    notice.value = '삭제됐습니다.'
+    await loadData()
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 화면이 처음 표시되면 물품 목록을 조회한다.
+onMounted(loadData)
+</script>
+<template>
+  <section>
+    <h1>물품 관리</h1>
+    <p>집 안 물품의 구매 정보와 보증 기간, 관리 주기를 확인합니다.</p>
+
+    <p v-if="errorMessage" class="error" role="alert">
+      {{ errorMessage }}
+    </p>
+    <p v-if="notice" role="status">{{ notice }}</p>
+
+    <form class="panel" @submit.prevent="saveHomeItem">
+      <h2>{{ editingId === null ? '물품 등록' : '물품 수정' }}</h2>
+
+      <fieldset :disabled="saving || loading">
+        <div class="form-grid">
+          <label>
+            물품명
+            <input v-model="form.name" maxlength="200" required />
+          </label>
+
+          <label>
+            분류 · 선택
+            <input v-model="form.category" maxlength="100" placeholder="가전, 가구 등" />
+          </label>
+
+          <label>
+            구매일 · 선택
+            <input v-model="form.purchaseDate" type="date" />
+          </label>
+
+          <label>
+            구매 금액 · 선택
+            <input
+              v-model="form.purchasePrice"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]+"
+              placeholder="금액이 없으면 비워 주세요"
+            />
+          </label>
+
+          <label>
+            보증 종료일 · 선택
+            <input
+              v-model="form.warrantyEndDate"
+              type="date"
+              :min="form.purchaseDate || undefined"
+            />
+          </label>
+
+          <label>
+            관리 주기 · 선택
+            <input
+              v-model="form.maintenanceCycle"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]+"
+              placeholder="일 단위, 예: 90"
+            />
+          </label>
+
+          <label>
+            상태
+            <select v-model="form.status" required>
+              <option value="IN_USE">사용 중</option>
+              <option value="STORED">보관 중</option>
+              <option value="DISPOSED">처분</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="memo-field">
+          메모
+          <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
+        </label>
+
+        <div class="button-group">
+          <button type="submit">
+            {{ saving ? '저장 중…' : editingId === null ? '등록' : '수정 저장' }}
+          </button>
+
+          <button v-if="editingId !== null" type="button" @click="resetForm">수정 취소</button>
+        </div>
+      </fieldset>
+    </form>
+
+    <section class="panel">
+      <div class="list-heading">
+        <h2>물품 목록</h2>
+        <button type="button" :disabled="loading || saving" @click="loadData">새로고침</button>
+      </div>
+
+      <p v-if="loading" role="status">조회 중입니다.</p>
+      <p v-else-if="errorMessage">목록이 최신 상태가 아닐 수 있습니다.</p>
+      <p v-else-if="homeItems.length === 0">등록된 물품이 없습니다.</p>
+
+      <div v-if="!loading && homeItems.length > 0" class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">물품명</th>
+              <th scope="col">분류</th>
+              <th scope="col">구매일</th>
+              <th scope="col">구매 금액</th>
+              <th scope="col">보증 종료일</th>
+              <th scope="col">관리 주기</th>
+              <th scope="col">상태</th>
+              <th scope="col">관리</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr v-for="item in homeItems" :key="item.id">
+              <td>{{ item.name }}</td>
+              <td>{{ item.category || '-' }}</td>
+              <td>{{ item.purchaseDate ?? '-' }}</td>
+              <td class="amount">
+                {{
+                  item.purchasePrice === null
+                    ? '-'
+                    : `${item.purchasePrice.toLocaleString('ko-KR')}원`
+                }}
+              </td>
+              <td>{{ item.warrantyEndDate ?? '-' }}</td>
+              <td>
+                {{ item.maintenanceCycle === null ? '-' : `${item.maintenanceCycle}일` }}
+              </td>
+              <td>{{ statusLabel(item.status) }}</td>
+              <td>
+                <div class="button-group">
+                  <button type="button" :disabled="saving || loading" @click="startEdit(item)">
+                    수정
+                  </button>
+                  <button type="button" :disabled="saving || loading" @click="deleteHomeItem(item)">
+                    삭제
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </section>
+</template>
+<style scoped>
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+.memo-field {
+  margin: 16px 0;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.button-group button {
+  white-space: nowrap;
+}
+
+.error {
+  color: #b91c1c;
+}
+
+.list-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.list-heading h2 {
+  margin: 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+th {
+  white-space: nowrap;
+}
+
+.amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

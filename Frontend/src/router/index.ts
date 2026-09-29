@@ -23,8 +23,7 @@ const router = createRouter({
     {
       path: '/items',
       name: 'items',
-      component: () => import('../views/ComingSoonView.vue'),
-      props: { title: '물품' },
+      component: () => import('../views/HomeItemView.vue'),
     },
     {
       path: '/statistics',

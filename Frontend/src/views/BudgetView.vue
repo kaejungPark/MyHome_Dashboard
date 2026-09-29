@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-
-// 백엔드 공통 응답 형식이다.
-interface ApiResponse<T> {
-  success: boolean // 요청 성공 여부
-  data: T | null // 응답 데이터
-  message: string | null // 오류 안내 메시지
-}
+import { request } from '../api/client'
 
 // 월별 예산 조회 결과다.
 interface Budget {
@@ -27,18 +21,6 @@ const amount = ref<string | number>('') // 입력 중인 예산 금액
 const busy = ref(false) // 조회·저장·삭제 처리 여부
 const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 성공 메시지
-
-// API를 호출하고 HTTP 상태와 공통 응답의 성공 여부를 함께 검사한다.
-async function request<T>(url: string, options?: RequestInit): Promise<T | null> {
-  const response = await fetch(url, options)
-  const result: ApiResponse<T> = await response.json()
-
-  if (!response.ok || !result.success) {
-    throw new Error(result.message ?? `요청 실패 (${response.status})`)
-  }
-
-  return result.data
-}
 
 // 발생한 오류를 화면에 표시할 메시지로 변환한다.
 function showError(error: unknown) {

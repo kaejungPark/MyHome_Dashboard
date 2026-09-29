@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-
-// 백엔드 공통 응답 형식이다.
-// T는 각 API가 반환하는 데이터의 타입이다.
-interface ApiResponse<T> {
-  success: boolean // 요청 성공 여부
-  data: T | null // 응답 데이터
-  message: string | null // 오류 안내 메시지
-}
+import { request } from '../api/client'
 
 // 카테고리 선택 목록에서 사용하는 데이터다.
 interface Category {
@@ -62,18 +55,6 @@ function initialForm() {
 
 // 폼 입력값을 화면과 동기화한다.
 const form = reactive(initialForm())
-
-// HTTP 상태와 서버의 공통 응답을 함께 확인한다.
-async function request<T>(url: string, options?: RequestInit): Promise<T | null> {
-  const response = await fetch(url, options)
-  const result: ApiResponse<T> = await response.json()
-
-  if (!response.ok || !result.success) {
-    throw new Error(result.message ?? `요청 실패 (${response.status})`)
-  }
-
-  return result.data
-}
 
 // 오류 원인은 개발자 도구에 기록하고, 화면에는 안내 메시지를 표시한다.
 function showError(error: unknown) {
