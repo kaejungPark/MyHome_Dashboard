@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 물품 목록과 수정 화면에 필요한 정보를 전달한다.
+ * Dashboard에서의 물품 조회
  * 구매 정보, 보증 종료일, 관리 주기 등 선택 항목은 null일 수 있다.
  */
 public record HomeItemResponse(
