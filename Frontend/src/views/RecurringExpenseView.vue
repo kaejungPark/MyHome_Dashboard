@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { request } from '../api/client'
+import { Repeat, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue'
 
 // 카테고리 선택 목록이다.
 interface Category {
@@ -47,8 +48,8 @@ const categories = ref<Category[]>([]) // 카테고리 선택 목록
 const expenses = ref<RecurringExpense[]>([]) // 활성·비활성을 포함한 관리 목록
 const monthly = ref<MonthlyPayment | null>(null) // 월별 예정 목록과 합계
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
-const busy = ref(false) // 조회·저장·삭제 처리 중 여부
-const ready = ref(false) // 관리 목록 조회 성공 여부
+const saving = ref(false) // 조회·저장·삭제 처리 중 여부
+const loading = ref(false) // 관리 목록 조회 성공 여부
 const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
 
@@ -93,7 +94,7 @@ function resetForm() {
 // 관리 목록과 카테고리를 갱신한다.
 // 조회 실패 시 이전 목록으로 작업하지 못하도록 준비 상태를 해제한다.
 async function refreshManagement() {
-  ready.value = false
+  loading.value = false
 
   const [categoryData, expenseData] = await Promise.all([
     request<Category[]>('/api/categories'),
@@ -102,7 +103,7 @@ async function refreshManagement() {
 
   categories.value = categoryData ?? []
   expenses.value = expenseData ?? []
-  ready.value = true
+  loading.value = true
 }
 
 // 선택한 월의 예정 목록을 갱신한다.
@@ -121,10 +122,10 @@ async function refreshMonthly() {
 }
 
 // 최초 진입과 전체 새로고침 시 관리 목록과 예정 목록을 조회한다.
-async function loadAll() {
-  if (busy.value) return
+async function loadData() {
+  if (saving.value) return
 
-  busy.value = true
+  saving.value = true
   errorMessage.value = ''
   notice.value = ''
   monthly.value = null
@@ -135,15 +136,15 @@ async function loadAll() {
   } catch (error: unknown) {
     showError(error)
   } finally {
-    busy.value = false
+    saving.value = false
   }
 }
 
 // 월을 변경할 때는 예정 목록만 다시 조회한다.
 async function loadMonthly() {
-  if (busy.value) return
+  if (saving.value) return
 
-  busy.value = true
+  saving.value = true
   errorMessage.value = ''
   notice.value = ''
 
@@ -152,13 +153,13 @@ async function loadMonthly() {
   } catch (error: unknown) {
     showError(error)
   } finally {
-    busy.value = false
+    saving.value = false
   }
 }
 
 // 선택한 항목을 수정 폼에 채운다.
 function startEdit(expense: RecurringExpense) {
-  if (busy.value) return
+  if (saving.value) return
 
   editingId.value = expense.id
   errorMessage.value = ''
@@ -181,7 +182,7 @@ function startEdit(expense: RecurringExpense) {
 
 // 등록은 POST, 수정은 PUT으로 같은 형식의 JSON을 전송한다.
 async function saveExpense() {
-  if (busy.value || !ready.value) return
+  if (saving.value || !loading.value) return
 
   errorMessage.value = ''
   notice.value = ''
@@ -211,7 +212,7 @@ async function saveExpense() {
   }
 
   const id = editingId.value
-  busy.value = true
+  saving.value = true
 
   try {
     await request<null>(id === null ? baseUrl : `${baseUrl}/${id}`, {
@@ -240,16 +241,16 @@ async function saveExpense() {
   } catch (error: unknown) {
     showError(error)
   } finally {
-    busy.value = false
+    saving.value = false
   }
 }
 
 // 확인을 받은 뒤 선택한 고정 지출 설정을 삭제한다.
 async function deleteExpense(expense: RecurringExpense) {
-  if (busy.value || !ready.value) return
+  if (saving.value || !loading.value) return
   if (!window.confirm(`"${expense.title}" 고정 지출을 삭제하시겠습니까?`)) return
 
-  busy.value = true
+  saving.value = true
   errorMessage.value = ''
   notice.value = ''
 
@@ -265,7 +266,7 @@ async function deleteExpense(expense: RecurringExpense) {
   } catch (error: unknown) {
     showError(error)
   } finally {
-    busy.value = false
+    saving.value = false
   }
 }
 
@@ -275,32 +276,45 @@ function money(value: number) {
 }
 
 // 화면 진입 시 필요한 데이터를 조회한다.
-onMounted(loadAll)
+onMounted(loadData)
 </script>
 
 <template>
-  <section>
-    <div class="heading">
-      <h1>고정 지출</h1>
-      <button type="button" :disabled="busy" @click="loadAll">새로고침</button>
-    </div>
+  <section class="crud-page recurring-page">
+    <header class="page-heading">
+      <div class="page-icon">
+        <Repeat :size="28" aria-hidden="true" />
+      </div>
+      <div class="heading">
+        <h1>고정 지출</h1>
+        <p>매달 반복되는 지출과 납부일을 관리하고 월별 예상 금액을 확인합니다.</p>
+      </div>
+    </header>
 
-    <p v-if="busy" role="status">처리 중입니다.</p>
-    <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
-    <p v-if="notice" role="status">{{ notice }}</p>
+    <p v-if="errorMessage" class="message error-message" role="alert">
+      {{ errorMessage }}
+    </p>
+    <p v-if="notice" class="message success-message" role="status">{{ notice }}</p>
 
-    <form class="panel" @submit.prevent="saveExpense">
-      <h2>{{ editingId === null ? '고정 지출 등록' : '고정 지출 수정' }}</h2>
+    <form class="card" @submit.prevent="saveExpense">
+      <div class="card-heading">
+        <div class="heading-title">
+          <component :is="editingId === null ? Plus : Pencil" :size="20" aria-hidden="true" />
+          <h2>{{ editingId === null ? '고정 지출 등록' : '고정 지출 수정' }}</h2>
+        </div>
+        <span class="heading-note">* 필수 입력</span>
+      </div>
 
-      <fieldset :disabled="busy || !ready">
+      <fieldset :disabled="saving || !loading">
+        <legend class="sr-only">고정 지출 관리 입력</legend>
         <div class="form-grid">
           <label>
-            항목명
+            항목명 *
             <input v-model="form.title" maxlength="200" required />
           </label>
 
           <label>
-            카테고리
+            카테고리 *
             <select v-model="form.categoryId" required>
               <option value="" disabled>선택해 주세요</option>
               <option
@@ -314,7 +328,7 @@ onMounted(loadAll)
           </label>
 
           <label>
-            매월 예정 금액
+            매월 예정 금액 *
             <input
               v-model="form.amount"
               type="text"
@@ -326,12 +340,12 @@ onMounted(loadAll)
           </label>
 
           <label>
-            매월 납부일
+            매월 납부일 *
             <input v-model="form.paymentDay" type="number" min="1" max="31" step="1" required />
           </label>
 
           <label>
-            시작 월
+            시작 월 *
             <input v-model="form.startMonth" type="month" min="0001-01" max="9998-12" required />
           </label>
 
@@ -346,59 +360,109 @@ onMounted(loadAll)
           </label>
 
           <label>
-            사용 여부
+            사용 여부 *
             <select v-model="form.active">
               <option :value="true">사용</option>
               <option :value="false">중지</option>
             </select>
           </label>
+
+          <label class="memo-field">
+            메모
+            <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
+          </label>
         </div>
 
-        <label class="memo-field">
-          메모
-          <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
-        </label>
-
-        <div class="button-group">
-          <button type="submit" :disabled="categories.length === 0">
-            {{ editingId === null ? '등록' : '수정 저장' }}
+        <div class="form-actions">
+          <button
+            v-if="editingId !== null"
+            type="button"
+            class="btn btn-secondary"
+            @click="resetForm"
+          >
+            수정 취소
           </button>
-          <button v-if="editingId !== null" type="button" @click="resetForm">수정 취소</button>
+
+          <button type="submit" class="btn btn-primary">
+            <component :is="editingId === null ? Plus : Pencil" :size="16" aria-hidden="true" />
+            {{ saving ? '저장 중…' : editingId === null ? '등록' : '수정 저장' }}
+          </button>
         </div>
       </fieldset>
     </form>
 
-    <section class="panel">
-      <h2>고정 지출 목록</h2>
+    <section class="card" aria-labelledby="recurring-list-heading">
+      <div class="card-heading">
+        <div class="heading-title">
+          <List :size="20" aria-hidden="true" />
+          <h2 id="recurring-list-heading">고정 지출 목록</h2>
+          <span v-if="loading" class="count-badge">{{ expenses.length }}건</span>
+        </div>
 
-      <p v-if="!ready">목록을 불러오지 못했거나 조회 중입니다.</p>
-      <p v-else-if="expenses.length === 0">등록된 고정 지출이 없습니다.</p>
+        <button type="button" class="btn btn-secondary" :disabled="saving" @click="loadData">
+          <RefreshCw :size="16" aria-hidden="true" />
+          새로고침
+        </button>
+      </div>
 
-      <div v-else class="table-wrap">
-        <table>
+      <p v-if="saving" class="empty-state" role="status">처리 중입니다.</p>
+      <p v-else-if="errorMessage" class="list-warning">목록이 최신 상태가 아닐 수 있습니다.</p>
+      <p v-else-if="loading && expenses.length === 0" class="empty-state">
+        등록된 고정 지출이 없습니다.
+      </p>
+
+      <div v-if="loading && expenses.length > 0" class="table-wrap">
+        <table class="data-table recurring-table">
+          <caption class="sr-only">
+            등록된 고정 지출
+          </caption>
           <thead>
             <tr>
-              <th>항목</th>
-              <th>카테고리</th>
-              <th>금액</th>
-              <th>납부일</th>
-              <th>적용 기간</th>
-              <th>상태</th>
-              <th>관리</th>
+              <th scope="col">항목</th>
+              <th scope="col">카테고리</th>
+              <th scope="col" class="amount-cell">금액</th>
+              <th scope="col">납부일</th>
+              <th scope="col">적용 기간</th>
+              <th scope="col">상태</th>
+              <th scope="col" class="manage-cell">관리</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="expense in expenses" :key="expense.id">
-              <td>{{ expense.title }}</td>
+            <tr
+              v-for="expense in expenses"
+              :key="expense.id"
+              :class="{ 'editing-row': editingId === expense.id }"
+            >
+              <td class="title-cell">{{ expense.title }}</td>
               <td>{{ expense.categoryName }}</td>
-              <td>{{ money(expense.amount) }}</td>
-              <td>매월 {{ expense.paymentDay }}일</td>
-              <td>{{ expense.startMonth }} ~ {{ expense.endMonth ?? '계속' }}</td>
-              <td>{{ expense.active ? '사용' : '중지' }}</td>
+              <td class="amount-cell">{{ money(expense.amount) }}</td>
+              <td class="date-cell">매월 {{ expense.paymentDay }}일</td>
+              <td class="date-cell">{{ expense.startMonth }} ~ {{ expense.endMonth ?? '계속' }}</td>
               <td>
-                <div class="button-group">
-                  <button type="button" :disabled="busy" @click="startEdit(expense)">수정</button>
-                  <button type="button" :disabled="busy" @click="deleteExpense(expense)">
+                <span class="badge" :class="{ 'status-active': expense.active }">
+                  {{ expense.active ? '사용' : '중지' }}
+                </span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="btn btn-edit"
+                    :disabled="saving"
+                    :aria-label="`${expense.title} 수정`"
+                    @click="startEdit(expense)"
+                  >
+                    <Pencil :size="14" aria-hidden="true" />
+                    수정
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-delete"
+                    :disabled="saving"
+                    :aria-label="`${expense.title} 삭제`"
+                    @click="deleteExpense(expense)"
+                  >
+                    <Trash2 :size="14" aria-hidden="true" />
                     삭제
                   </button>
                 </div>
@@ -409,137 +473,145 @@ onMounted(loadAll)
       </div>
     </section>
 
-    <section class="panel">
-      <h2>월별 납부 예정</h2>
+    <section class="card" aria-labelledby="monthly-heading">
+      <div class="card-heading">
+        <div class="heading-title">
+          <Repeat :size="20" aria-hidden="true" />
+          <h2 id="monthly-heading">월별 납부 예정</h2>
+          <span v-if="monthly" class="count-badge"> {{ monthly.items.length }}건 </span>
+        </div>
+      </div>
 
-      <label class="month-field">
-        조회 월
-        <input
-          v-model="selectedMonth"
-          type="month"
-          min="0001-01"
-          max="9998-12"
-          :disabled="busy"
-          @change="loadMonthly"
-        />
-      </label>
+      <div class="form-grid monthly-filter">
+        <label>
+          조회 월
+          <input
+            v-model="selectedMonth"
+            type="month"
+            min="0001-01"
+            max="9998-12"
+            :disabled="saving"
+            @change="loadMonthly"
+          />
+        </label>
+      </div>
 
-      <p>해당 월 전체의 예정 금액이며, 실제 납부 여부는 반영하지 않습니다.</p>
+      <p class="monthly-description">
+        선택한 월의 납부 예정 금액이며, 실제 납부 여부는 반영하지 않습니다.
+      </p>
 
-      <template v-if="monthly">
-        <p>
-          <strong>예정 합계: {{ money(monthly.totalAmount) }}</strong>
+      <p v-if="saving" class="empty-state" role="status">처리 중입니다.</p>
+
+      <template v-else-if="monthly">
+        <div class="monthly-summary">
+          <span>납부 예정 합계</span>
+          <strong>{{ money(monthly.totalAmount) }}</strong>
+        </div>
+
+        <p v-if="monthly.items.length === 0" class="empty-state">
+          해당 월의 납부 예정 항목이 없습니다.
         </p>
-        <p v-if="monthly.items.length === 0">해당 월의 납부 예정 항목이 없습니다.</p>
 
         <div v-else class="table-wrap">
-          <table>
+          <table class="data-table monthly-table">
+            <caption class="sr-only">
+              {{
+                monthly.month
+              }}
+              납부 예정 목록
+            </caption>
             <thead>
               <tr>
-                <th>납부 예정일</th>
-                <th>항목</th>
-                <th>카테고리</th>
-                <th>금액</th>
-                <th>결제 수단</th>
+                <th scope="col">납부 예정일</th>
+                <th scope="col">항목</th>
+                <th scope="col">카테고리</th>
+                <th scope="col" class="amount-cell">금액</th>
+                <th scope="col">결제 수단</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="item in monthly.items" :key="item.id">
-                <td>{{ item.paymentDate }}</td>
-                <td>{{ item.title }}</td>
-                <td>{{ item.categoryName }}</td>
-                <td>{{ money(item.amount) }}</td>
-                <td>{{ item.paymentMethod ?? '-' }}</td>
+                <td class="date-cell">{{ item.paymentDate }}</td>
+                <td class="title-cell">{{ item.title }}</td>
+                <td>
+                  <span class="badge">{{ item.categoryName }}</span>
+                </td>
+                <td class="amount-cell">{{ money(item.amount) }}</td>
+                <td>{{ item.paymentMethod || '—' }}</td>
               </tr>
             </tbody>
           </table>
         </div>
       </template>
+
+      <p v-else class="empty-state">
+        월별 납부 예정 정보를 표시할 수 없습니다. 조회 월을 확인한 뒤 다시 조회해 주세요.
+      </p>
     </section>
   </section>
 </template>
 
 <style scoped>
-.heading,
-.button-group {
+.recurring-table {
+  min-width: 800px;
+}
+
+.recurring-table .title-cell {
+  min-width: 150px;
+  max-width: 280px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.recurring-page .badge.status-active {
+  background-color: #ecfdf5;
+  color: #047857;
+}
+/* 조회 월 입력 너비 */
+.recurring-page .monthly-filter {
+  grid-template-columns: minmax(0, 240px);
+}
+
+.monthly-description {
+  margin: 12px 0 20px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* 월별 예정 합계 */
+.monthly-summary {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-}
-
-.heading {
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 20px;
+  border-radius: 10px;
+  background-color: #eff6ff;
 }
 
-.heading h1 {
-  margin: 0;
+.monthly-summary span {
+  color: #475569;
+  font-size: 14px;
 }
 
-fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.monthly-summary strong {
+  color: #2563eb;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+.monthly-table {
+  min-width: 620px;
 }
 
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-input,
-select,
-textarea {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font: inherit;
-}
-
-.memo-field {
-  margin: 16px 0;
-}
-
-.month-field {
-  max-width: 240px;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 12px;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-}
-
-button {
-  white-space: nowrap;
-}
-
-.error {
-  color: #b91c1c;
-}
-
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
+.monthly-table .title-cell {
+  min-width: 150px;
+  max-width: 280px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 </style>

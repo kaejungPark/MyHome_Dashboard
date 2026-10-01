@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, reactive } from 'vue'
 import { request } from '../api/client'
+import { CalendarDays, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 일정 관리 화면의 제목과 주요 동작에 사용할 아이콘
 
 // 일정 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Schedule {
@@ -197,27 +198,41 @@ async function deleteSchedule(schedule: Schedule) {
 onMounted(loadData)
 </script>
 <template>
-  <section>
-    <h1>일정 관리</h1>
-    <p>일정을 등록하고 마감일과 완료 여부를 확인합니다.</p>
+  <section class="crud-page schedule-page">
+    <header class="page-heading">
+      <div class="page-icon">
+        <CalendarDays :size="28" aria-hidden="true" />
+      </div>
+      <div>
+        <h1>일정 관리</h1>
+        <p>일정을 등록하고 마감일과 완료 여부를 확인합니다.</p>
+      </div>
+    </header>
 
-    <p v-if="errorMessage" class="error" role="alert">
+    <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
     </p>
-    <p v-if="notice" role="status">{{ notice }}</p>
+    <p v-if="notice" class="message success-message" role="status">{{ notice }}</p>
 
-    <form class="panel" @submit.prevent="saveSchedule">
-      <h2>{{ editingId === null ? '일정 등록' : '일정 수정' }}</h2>
+    <form class="card" @submit.prevent="saveSchedule">
+      <div class="card-heading">
+        <div class="heading-title">
+          <component :is="editingId === null ? Plus : Pencil" :size="20" aria-hidden="true" />
+          <h2>{{ editingId === null ? '일정 등록' : '일정 수정' }}</h2>
+        </div>
+        <span class="heading-note">* 필수 입력</span>
+      </div>
 
       <fieldset :disabled="saving || loading">
+        <legend class="sr-only">일정 관리 입력</legend>
         <div class="form-grid">
           <label>
-            제목
+            제목 *
             <input v-model="form.title" required maxlength="200" />
           </label>
 
           <label>
-            일정 유형
+            일정 유형 *
             <select v-model="form.scheduleType" required>
               <option value="GENERAL">일반 일정</option>
               <option value="PAYMENT">납부</option>
@@ -226,12 +241,12 @@ onMounted(loadData)
           </label>
 
           <label>
-            시작일
+            시작일 *
             <input v-model="form.startDate" type="date" required />
           </label>
 
           <label>
-            마감일
+            마감일 *
             <input v-model="form.dueDate" type="date" :min="form.startDate" required />
           </label>
 
@@ -253,67 +268,111 @@ onMounted(loadData)
               <option :value="true">완료</option>
             </select>
           </label>
+          <label class="memo-field">
+            메모
+            <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
+          </label>
         </div>
 
-        <label class="memo-field">
-          메모
-          <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
-        </label>
+        <div class="form-actions">
+          <button
+            v-if="editingId !== null"
+            type="button"
+            class="btn btn-secondary"
+            @click="resetForm"
+          >
+            수정 취소
+          </button>
 
-        <div class="button-group">
-          <button type="submit">
+          <button type="submit" class="btn btn-primary">
+            <component :is="editingId === null ? Plus : Pencil" :size="16" aria-hidden="true" />
             {{ saving ? '저장 중…' : editingId === null ? '등록' : '수정 저장' }}
           </button>
-          <button v-if="editingId !== null" type="button" @click="resetForm">수정 취소</button>
         </div>
       </fieldset>
     </form>
 
-    <section class="panel">
-      <div class="list-heading">
-        <h2>일정 목록</h2>
-        <button type="button" :disabled="loading || saving" @click="loadData">새로고침</button>
+    <section class="card" aria-labelledby="schedule-list-heading">
+      <div class="card-heading">
+        <div class="heading-title">
+          <List :size="20" aria-hidden="true" />
+          <h2 id="schedule-list-heading">일정 목록</h2>
+          <span v-if="!loading" class="count-badge"> {{ schedules.length }}건</span>
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loading || saving"
+          @click="loadData"
+        >
+          <RefreshCw :size="16" aria-hidden="true" />
+          새로고침
+        </button>
       </div>
 
-      <p v-if="loading" role="status">조회 중입니다.</p>
-      <p v-else-if="errorMessage">목록이 최신 상태가 아닐 수 있습니다.</p>
-      <p v-else-if="schedules.length === 0">등록된 일정이 없습니다.</p>
+      <p v-if="loading" class="empty-state" role="status">조회 중입니다.</p>
+      <p v-else-if="errorMessage" class="list-warning">목록이 최신 상태가 아닐 수 있습니다.</p>
+      <p v-else-if="schedules.length === 0" class="empty-state">등록된 일정이 없습니다.</p>
 
       <div v-if="!loading && schedules.length > 0" class="table-wrap">
-        <table>
+        <table class="data-table schedule-table">
+          <caption class="sr-only">
+            등록된 일정
+          </caption>
           <thead>
             <tr>
               <th scope="col">제목</th>
               <th scope="col">유형</th>
               <th scope="col">시작일</th>
               <th scope="col">마감일</th>
-              <th scope="col">금액</th>
+              <th scope="col" class="amount-cell">금액</th>
               <th scope="col">상태</th>
-              <th scope="col">관리</th>
+              <th scope="col" class="manage-cell">관리</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="schedule in schedules" :key="schedule.id">
-              <td>{{ schedule.title }}</td>
-              <td>{{ scheduleTypeLabel(schedule.scheduleType) }}</td>
-              <td>{{ schedule.startDate }}</td>
-              <td>{{ schedule.dueDate }}</td>
-              <td class="amount">
+            <tr
+              v-for="schedule in schedules"
+              :key="schedule.id"
+              :class="{ 'editing-row': editingId === schedule.id }"
+            >
+              <td class="title-cell">{{ schedule.title }}</td>
+              <td>
+                <span class="badge">{{ scheduleTypeLabel(schedule.scheduleType) }}</span>
+              </td>
+              <td class="date-cell">{{ schedule.startDate }}</td>
+              <td class="date-cell">{{ schedule.dueDate }}</td>
+              <td class="amount-cell">
                 {{
                   schedule.amount === null ? '-' : `${schedule.amount.toLocaleString('ko-KR')}원`
                 }}
               </td>
-              <td>{{ schedule.completed ? '완료' : '미완료' }}</td>
               <td>
-                <div class="button-group">
-                  <button type="button" :disabled="saving || loading" @click="startEdit(schedule)">
+                <span class="badge" :class="{ 'status-incomplete': schedule.completed === false }">
+                  {{ schedule.completed ? '완료' : '미완료' }}
+                </span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="btn btn-edit"
+                    :disabled="saving || loading"
+                    :aria-label="`${schedule.title} 수정`"
+                    @click="startEdit(schedule)"
+                  >
+                    <Pencil :size="14" aria-hidden="true" />
                     수정
                   </button>
                   <button
                     type="button"
+                    class="btn btn-delete"
                     :disabled="saving || loading"
+                    :aria-label="`${schedule.title} 삭제`"
                     @click="deleteSchedule(schedule)"
                   >
+                    <Trash2 :size="14" aria-hidden="true" />
                     삭제
                   </button>
                 </div>
@@ -327,94 +386,19 @@ onMounted(loadData)
 </template>
 
 <style scoped>
-fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.schedule-table {
+  min-width: 740px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+.schedule-table .title-cell {
+  min-width: 150px;
+  max-width: 280px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-input,
-select,
-textarea {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font: inherit;
-}
-
-textarea {
-  resize: vertical;
-}
-
-.memo-field {
-  margin: 16px 0;
-}
-
-.button-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.button-group button {
-  white-space: nowrap;
-}
-
-.error {
+.schedule-page .badge.status-incomplete {
+  background-color: #eff6ff;
   color: #b91c1c;
-}
-
-.list-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.list-heading h2 {
-  margin: 0;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 12px;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-}
-
-.amount {
-  text-align: right;
-  white-space: nowrap;
-}
-
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

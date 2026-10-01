@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { request } from '../api/client'
+import { Coins, Target, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue' // 월별 예산 화면의 제목과 주요 동작에 사용할 아이콘
 
 // 월별 예산 조회 결과다.
 interface Budget {
@@ -146,51 +147,143 @@ function money(value: number | null) {
 onMounted(loadBudget)
 </script>
 <template>
-  <section>
-    <h1>월별 예산</h1>
+  <section class="crud-page budget-page">
+    <header class="page-heading">
+      <div class="page-icon">
+        <Coins :size="20" aria-hidden="true" />
+      </div>
+      <div class="heading">
+        <h1>월별 예산</h1>
+        <p>월별 예산을 설정하고 지출 금액과 남은 예산을 확인합니다.</p>
+      </div>
+    </header>
 
-    <div class="panel controls">
-      <label>
-        조회 월
-        <input v-model="month" type="month" :disabled="busy" @change="loadBudget" />
-      </label>
-      <button type="button" :disabled="busy" @click="loadBudget">새로고침</button>
-    </div>
+    <p v-if="errorMessage" class="message error-message" role="alert">
+      {{ errorMessage }}
+    </p>
+    <p v-if="busy" class="empty-state" role="status">처리 중입니다.</p>
 
-    <p v-if="busy" role="status">처리 중입니다.</p>
-    <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>
-    <p v-if="notice" role="status">{{ notice }}</p>
+    <section class="card" aria-labelledby="budget-heading">
+      <div class="card-heading">
+        <div class="heading-title">
+          <Target :size="20" aria-hidden="true" />
+          <h2 id="budget-heading">월별 예산 조회</h2>
+        </div>
+
+        <button type="button" class="btn btn-secondary" :disabled="busy" @click="loadBudget">
+          <RefreshCw :size="16" aria-hidden="true" />
+          새로고침
+        </button>
+      </div>
+
+      <div class="form-grid budget-filter">
+        <label>
+          조회 월
+          <input
+            v-model="month"
+            type="month"
+            min="0001-01"
+            max="9998-12"
+            :disabled="busy"
+            @change="loadBudget"
+          />
+        </label>
+      </div>
+    </section>
 
     <template v-if="budget">
-      <section class="panel">
-        <h2>{{ budget.month }} 예산 현황</h2>
-        <dl>
-          <dt>예산 금액</dt>
-          <dd>{{ money(budget.budgetAmount) }}</dd>
-          <dt>사용 금액</dt>
-          <dd>{{ money(budget.spentAmount) }}</dd>
-          <dt>잔여 예산</dt>
-          <dd :class="{ error: (budget.remainingAmount ?? 0) < 0 }">
-            {{ money(budget.remainingAmount) }}
-          </dd>
+      <section class="card" aria-labelledby="budget-summary-heading">
+        <div class="card-heading">
+          <div class="heading-title">
+            <Target :size="20" aria-hidden="true" />
+            <h2 id="budget-summary-heading">{{ budget.month }} 예산 현황</h2>
+          </div>
+          <span class="badge">
+            {{ budget.configured ? '예산 설정됨' : '예산 미등록' }}
+          </span>
+        </div>
+
+        <dl class="budget-summary">
+          <div class="summary-item">
+            <dt>예산 금액</dt>
+            <dd>{{ money(budget.budgetAmount) }}</dd>
+          </div>
+
+          <div class="summary-item">
+            <dt>사용 금액</dt>
+            <dd>{{ money(budget.spentAmount) }}</dd>
+          </div>
+
+          <div class="summary-item">
+            <dt>잔여 예산</dt>
+            <dd :class="{ 'over-budget': (budget.remainingAmount ?? 0) < 0 }">
+              {{ money(budget.remainingAmount) }}
+            </dd>
+          </div>
         </dl>
-        <p v-if="(budget.remainingAmount ?? 0) < 0" class="error">예산을 초과했습니다.</p>
+
+        <p v-if="!budget.configured" class="budget-note">
+          예산을 등록하면 잔여 예산을 확인할 수 있습니다.
+        </p>
+        <p
+          v-else-if="(budget.remainingAmount ?? 0) < 0"
+          class="budget-note over-budget"
+          role="status"
+        >
+          예산을 초과했습니다.
+        </p>
       </section>
 
-      <form class="panel" @submit.prevent="saveBudget">
-        <h2>{{ budget.configured ? '예산 수정' : '예산 등록' }}</h2>
-        <fieldset :disabled="busy">
-          <label>
-            예산 금액
-            <input v-model="amount" type="number" min="0" step="0.01" required />
-          </label>
+      <form class="card" @submit.prevent="saveBudget">
+        <div class="card-heading">
+          <div class="heading-title">
+            <component :is="budget.configured ? Pencil : Plus" :size="20" aria-hidden="true" />
+            <h2>{{ budget.configured ? '예산 수정' : '예산 등록' }}</h2>
+          </div>
+          <span class="heading-note">* 필수 입력</span>
+        </div>
 
-          <div class="button-group">
-            <button type="submit">
+        <fieldset :disabled="busy">
+          <legend class="sr-only">월별 예산 금액 입력</legend>
+
+          <div class="form-grid">
+            <label>
+              예산 금액(원) *
+              <input
+                v-model="amount"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                placeholder="예산 금액을 입력해 주세요"
+              />
+            </label>
+          </div>
+
+          <div class="form-actions">
+            <button
+              v-if="budget.configured"
+              type="button"
+              class="btn btn-delete"
+              @click="deleteBudget"
+            >
+              <Trash2 :size="16" aria-hidden="true" />
+              삭제
+            </button>
+
+            <button
+              v-if="budget.configured"
+              type="button"
+              class="btn btn-secondary"
+              @click="resetAmount"
+            >
+              수정 취소
+            </button>
+
+            <button type="submit" class="btn btn-primary">
+              <component :is="budget.configured ? Pencil : Plus" :size="16" aria-hidden="true" />
               {{ budget.configured ? '수정 저장' : '등록' }}
             </button>
-            <button v-if="budget.configured" type="button" @click="resetAmount">수정 취소</button>
-            <button v-if="budget.configured" type="button" @click="deleteBudget">삭제</button>
           </div>
         </fieldset>
       </form>
@@ -199,48 +292,54 @@ onMounted(loadBudget)
 </template>
 
 <style scoped>
-.controls,
-.button-group {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 12px;
+.budget-page .budget-filter {
+  grid-template-columns: minmax(0, 240px);
 }
-
-.button-group {
-  margin-top: 16px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-input {
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-}
-
-fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-dl {
+/* 예산 현황을 세 개의 요약 카드로 표시한다. */
+.budget-summary {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px 24px;
-}
-
-dd {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   margin: 0;
 }
 
-.error {
+.summary-item {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background-color: #f8fafc;
+}
+
+.summary-item dt {
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.summary-item dd {
+  margin: 0;
+  color: #1e293b;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.budget-note {
+  margin: 16px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+/* 초과 금액과 안내 문구를 강조한다. */
+.budget-page .over-budget {
   color: #b91c1c;
+}
+
+@media (max-width: 640px) {
+  .budget-summary {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { request } from '../api/client'
+import { Package, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 물품 관리 화면의 제목과 주요 동작에 사용할 아이콘
 
 // 물품 상태에 사용할 수 있는 값이다.
 type HomeItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
@@ -215,37 +216,53 @@ async function deleteHomeItem(item: HomeItem) {
 onMounted(loadData)
 </script>
 <template>
-  <section>
-    <h1>물품 관리</h1>
-    <p>집 안 물품의 구매 정보와 보증 기간, 관리 주기를 확인합니다.</p>
+  <section class="crud-page item-page">
+    <header class="page-heading">
+      <div class="page-icon">
+        <Package :size="28" aria-hidden="true" />
+      </div>
+      <div>
+        <h1>물품 관리</h1>
+        <p>집 안 물품의 구매 정보와 보증 기간, 관리 주기를 확인합니다.</p>
+      </div>
+    </header>
 
-    <p v-if="errorMessage" class="error" role="alert">
+    <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
     </p>
-    <p v-if="notice" role="status">{{ notice }}</p>
+    <p v-if="notice" class="message success-message" role="status">
+      {{ notice }}
+    </p>
 
-    <form class="panel" @submit.prevent="saveHomeItem">
-      <h2>{{ editingId === null ? '물품 등록' : '물품 수정' }}</h2>
+    <form class="card" @submit.prevent="saveHomeItem">
+      <div class="card-heading">
+        <div class="heading-title">
+          <component :is="editingId === null ? Plus : Pencil" :size="20" aria-hidden="true" />
+          <h2>{{ editingId === null ? '물품 등록' : '물품 수정' }}</h2>
+        </div>
+        <span class="heading-note">* 필수 입력</span>
+      </div>
 
       <fieldset :disabled="saving || loading">
+        <legend class="sr-only">물품 관리 입력</legend>
         <div class="form-grid">
           <label>
-            물품명
+            물품명 *
             <input v-model="form.name" maxlength="200" required />
           </label>
 
           <label>
-            분류 · 선택
+            분류
             <input v-model="form.category" maxlength="100" placeholder="가전, 가구 등" />
           </label>
 
           <label>
-            구매일 · 선택
+            구매일
             <input v-model="form.purchaseDate" type="date" />
           </label>
 
           <label>
-            구매 금액 · 선택
+            구매 금액
             <input
               v-model="form.purchasePrice"
               type="text"
@@ -256,7 +273,7 @@ onMounted(loadData)
           </label>
 
           <label>
-            보증 종료일 · 선택
+            보증 종료일
             <input
               v-model="form.warrantyEndDate"
               type="date"
@@ -265,7 +282,7 @@ onMounted(loadData)
           </label>
 
           <label>
-            관리 주기 · 선택
+            관리 주기
             <input
               v-model="form.maintenanceCycle"
               type="text"
@@ -276,78 +293,123 @@ onMounted(loadData)
           </label>
 
           <label>
-            상태
+            상태 *
             <select v-model="form.status" required>
               <option value="IN_USE">사용 중</option>
               <option value="STORED">보관 중</option>
               <option value="DISPOSED">처분</option>
             </select>
           </label>
+
+          <label class="memo-field">
+            메모
+            <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
+          </label>
         </div>
 
-        <label class="memo-field">
-          메모
-          <textarea v-model="form.memo" maxlength="2000" rows="3"></textarea>
-        </label>
-
-        <div class="button-group">
-          <button type="submit">
-            {{ saving ? '저장 중…' : editingId === null ? '등록' : '수정 저장' }}
+        <div class="form-actions">
+          <button
+            v-if="editingId !== null"
+            type="button"
+            class="btn btn-secondary"
+            @click="resetForm"
+          >
+            수정 취소
           </button>
 
-          <button v-if="editingId !== null" type="button" @click="resetForm">수정 취소</button>
+          <button type="submit" class="btn btn-primary">
+            <component :is="editingId === null ? Plus : Pencil" :size="16" aria-hidden="true" />
+            {{ saving ? '저장 중…' : editingId === null ? '등록' : '수정 저장' }}
+          </button>
         </div>
       </fieldset>
     </form>
 
-    <section class="panel">
-      <div class="list-heading">
-        <h2>물품 목록</h2>
-        <button type="button" :disabled="loading || saving" @click="loadData">새로고침</button>
+    <section class="card" aria-labelledby="item-list-heading">
+      <div class="card-heading">
+        <div class="heading-title">
+          <List :size="20" aria-hidden="true" />
+          <h2 id="item-list-heading">물품 목록</h2>
+          <span v-if="!loading" class="count-badge"> {{ homeItems.length }}건</span>
+        </div>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loading || saving"
+          @click="loadData"
+        >
+          <RefreshCw :size="16" aria-hidden="true" />
+          새로고침
+        </button>
       </div>
 
-      <p v-if="loading" role="status">조회 중입니다.</p>
-      <p v-else-if="errorMessage">목록이 최신 상태가 아닐 수 있습니다.</p>
-      <p v-else-if="homeItems.length === 0">등록된 물품이 없습니다.</p>
+      <p v-if="loading" class="empty-state" role="status">조회 중입니다.</p>
+      <p v-else-if="errorMessage" class="list-warning">목록이 최신 상태가 아닐 수 있습니다.</p>
+      <p v-else-if="homeItems.length === 0" class="empty-state">등록된 물품이 없습니다.</p>
 
       <div v-if="!loading && homeItems.length > 0" class="table-wrap">
-        <table>
+        <table class="data-table item-table">
+          <caption class="sr-only">
+            등록된 물품
+          </caption>
           <thead>
             <tr>
               <th scope="col">물품명</th>
               <th scope="col">분류</th>
               <th scope="col">구매일</th>
-              <th scope="col">구매 금액</th>
+              <th scope="col" class="amount-cell">구매 금액</th>
               <th scope="col">보증 종료일</th>
               <th scope="col">관리 주기</th>
               <th scope="col">상태</th>
-              <th scope="col">관리</th>
+              <th scope="col" class="manage-cell">관리</th>
             </tr>
           </thead>
 
           <tbody>
-            <tr v-for="item in homeItems" :key="item.id">
-              <td>{{ item.name }}</td>
-              <td>{{ item.category || '-' }}</td>
-              <td>{{ item.purchaseDate ?? '-' }}</td>
-              <td class="amount">
+            <tr
+              v-for="homeItem in homeItems"
+              :key="homeItem.id"
+              :class="{ 'editing-row': editingId === homeItem.id }"
+            >
+              <td class="title-cell">{{ homeItem.name }}</td>
+              <td>{{ homeItem.category || '-' }}</td>
+              <td class="date-cell">{{ homeItem.purchaseDate ?? '-' }}</td>
+              <td class="amount-cell">
                 {{
-                  item.purchasePrice === null
+                  homeItem.purchasePrice === null
                     ? '-'
-                    : `${item.purchasePrice.toLocaleString('ko-KR')}원`
+                    : `${homeItem.purchasePrice.toLocaleString('ko-KR')}원`
                 }}
               </td>
-              <td>{{ item.warrantyEndDate ?? '-' }}</td>
+              <td class="date-cell">{{ homeItem.warrantyEndDate ?? '-' }}</td>
               <td>
-                {{ item.maintenanceCycle === null ? '-' : `${item.maintenanceCycle}일` }}
+                {{ homeItem.maintenanceCycle === null ? '-' : `${homeItem.maintenanceCycle}일` }}
               </td>
-              <td>{{ statusLabel(item.status) }}</td>
               <td>
-                <div class="button-group">
-                  <button type="button" :disabled="saving || loading" @click="startEdit(item)">
+                <span class="badge">
+                  {{ statusLabel(homeItem.status) }}
+                </span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="btn btn-edit"
+                    :disabled="saving || loading"
+                    :aria-label="`${homeItem.name} 수정`"
+                    @click="startEdit(homeItem)"
+                  >
+                    <Pencil :size="14" aria-hidden="true" />
                     수정
                   </button>
-                  <button type="button" :disabled="saving || loading" @click="deleteHomeItem(item)">
+                  <button
+                    type="button"
+                    class="btn btn-delete"
+                    :disabled="saving || loading"
+                    :aria-label="`${homeItem.name} 삭제`"
+                    @click="deleteHomeItem(homeItem)"
+                  >
+                    <Trash2 :size="14" aria-hidden="true" />
                     삭제
                   </button>
                 </div>
@@ -360,100 +422,14 @@ onMounted(loadData)
   </section>
 </template>
 <style scoped>
-fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.item-table {
+  min-width: 740px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-input,
-select,
-textarea {
-  width: 100%;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font: inherit;
-}
-
-textarea {
-  resize: vertical;
-}
-
-.memo-field {
-  margin: 16px 0;
-}
-
-.button-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.button-group button {
-  white-space: nowrap;
-}
-
-.error {
-  color: #b91c1c;
-}
-
-.list-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.list-heading h2 {
-  margin: 0;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 12px;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-  vertical-align: middle;
-}
-
-th {
-  white-space: nowrap;
-}
-
-.amount {
-  text-align: right;
-  white-space: nowrap;
-}
-
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
+.item-table .title-cell {
+  min-width: 150px;
+  max-width: 280px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 </style>

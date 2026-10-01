@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { request } from '../api/client'
+import { Wallet, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 생활비 화면의 제목과 주요 동작에 사용할 아이콘
 
 // 카테고리 선택 목록에서 사용하는 데이터다.
 interface Category {
@@ -187,27 +188,49 @@ onMounted(loadData)
 </script>
 
 <template>
-  <section>
-    <h1>생활비</h1>
-    <p>지출을 등록하고 사용 내역을 확인합니다.</p>
+  <section class="crud-page expense-page">
+    <header class="page-heading">
+      <div class="page-icon">
+        <Wallet :size="28" aria-hidden="true" />
+      </div>
+      <div>
+        <h1>생활비</h1>
+        <p>지출을 등록하고 사용 내역을 확인합니다.</p>
+      </div>
+    </header>
 
-    <p v-if="errorMessage" class="error" role="alert">
+    <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
     </p>
-    <p v-if="notice" role="status">{{ notice }}</p>
+    <p v-if="notice" class="message success-message" role="status">
+      {{ notice }}
+    </p>
 
-    <form class="panel" @submit.prevent="saveExpense">
-      <h2>{{ editingId === null ? '지출 등록' : '지출 수정' }}</h2>
+    <form class="card" @submit.prevent="saveExpense">
+      <div class="card-heading">
+        <div class="heading-title">
+          <component :is="editingId === null ? Plus : Pencil" :size="20" aria-hidden="true" />
+          <h2>{{ editingId === null ? '지출 등록' : '지출 수정' }}</h2>
+        </div>
+        <span class="heading-note">* 필수 입력</span>
+      </div>
 
       <fieldset :disabled="saving || loading">
+        <legend class="sr-only">지출 정보 입력</legend>
+
         <div class="form-grid">
           <label>
-            제목
-            <input v-model="form.title" required maxlength="200" />
+            제목 *
+            <input
+              v-model="form.title"
+              required
+              maxlength="200"
+              placeholder="제목을 입력해주세요"
+            />
           </label>
 
           <label>
-            카테고리
+            카테고리 *
             <select v-model="form.categoryId" required>
               <option value="" disabled>선택해 주세요</option>
               <option
@@ -221,12 +244,19 @@ onMounted(loadData)
           </label>
 
           <label>
-            금액
-            <input v-model="form.amount" type="number" min="0.01" step="0.01" required />
+            금액(원) *
+            <input
+              v-model="form.amount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              required
+              placeholder="금액을 입력해 주세요"
+            />
           </label>
 
           <label>
-            지출일
+            지출일 *
             <input v-model="form.expenseDate" type="date" required />
           </label>
 
@@ -240,66 +270,120 @@ onMounted(loadData)
 
           <label>
             결제 수단
-            <input v-model="form.paymentMethod" maxlength="50" placeholder="카드, 현금 등" />
+            <input
+              v-model="form.paymentMethod"
+              maxlength="50"
+              placeholder="카드, 현금, 계좌이체 등"
+            />
+          </label>
+
+          <label class="memo-field">
+            메모
+            <textarea
+              v-model="form.memo"
+              maxlength="2000"
+              rows="3"
+              placeholder="필요한 내용을 남겨 주세요"
+            />
           </label>
         </div>
 
-        <label class="memo-field">
-          메모
-          <textarea v-model="form.memo" maxlength="2000" rows="3" />
-        </label>
-
-        <div class="button-group">
-          <button type="submit" :disabled="categories.length === 0">
-            {{ saving ? '저장 중…' : editingId === null ? '등록' : '수정 저장' }}
+        <div class="form-actions">
+          <button
+            v-if="editingId !== null"
+            type="button"
+            class="btn btn-secondary"
+            @click="resetForm"
+          >
+            수정 취소
           </button>
 
-          <button v-if="editingId !== null" type="button" @click="resetForm">수정 취소</button>
+          <button type="submit" class="btn btn-primary" :disabled="categories.length === 0">
+            <component :is="editingId === null ? Plus : Pencil" :size="16" aria-hidden="true" />
+            {{ saving ? '저장 중…' : editingId === null ? '지출 등록' : '수정 저장' }}
+          </button>
         </div>
       </fieldset>
     </form>
 
-    <section class="panel">
-      <div class="list-heading">
-        <h2>지출 목록</h2>
-        <button type="button" :disabled="loading || saving" @click="loadData">새로고침</button>
+    <section class="card" aria-labelledby="expense-list-heading">
+      <div class="card-heading">
+        <div class="heading-title">
+          <List :size="20" aria-hidden="true" />
+          <h2 id="expense-list-heading">지출 목록</h2>
+          <span v-if="!loading" class="count-badge"> {{ expenses.length }}건 </span>
+        </div>
+
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loading || saving"
+          @click="loadData"
+        >
+          <RefreshCw :size="16" aria-hidden="true" />
+          새로고침
+        </button>
       </div>
 
-      <p v-if="loading" role="status">조회 중입니다.</p>
-      <p v-else-if="errorMessage">목록이 최신 상태가 아닐 수 있습니다.</p>
-      <p v-else-if="expenses.length === 0">등록된 지출이 없습니다.</p>
+      <p v-if="loading" class="empty-state" role="status">지출 내역을 불러오는 중입니다.</p>
+      <p v-else-if="errorMessage" class="list-warning">목록이 최신 상태가 아닐 수 있습니다.</p>
+      <p v-else-if="expenses.length === 0" class="empty-state">
+        등록된 지출이 없습니다. 첫 지출을 등록해 보세요.
+      </p>
 
       <div v-if="!loading && expenses.length > 0" class="table-wrap">
-        <table>
+        <table class="data-table expense-table">
+          <caption class="sr-only">
+            등록된 지출 내역
+          </caption>
           <thead>
             <tr>
               <th scope="col">날짜</th>
               <th scope="col">제목</th>
               <th scope="col">카테고리</th>
               <th scope="col">유형</th>
-              <th scope="col">금액</th>
-              <th scope="col">관리</th>
+              <th scope="col" class="amount-cell">금액</th>
+              <th scope="col" class="manage-cell">관리</th>
             </tr>
           </thead>
+
           <tbody>
-            <tr v-for="expense in expenses" :key="expense.id">
-              <td>{{ expense.expenseDate }}</td>
-              <td>{{ expense.title }}</td>
-              <td>{{ expense.categoryName }}</td>
+            <tr
+              v-for="expense in expenses"
+              :key="expense.id"
+              :class="{ 'editing-row': editingId === expense.id }"
+            >
+              <td class="date-cell">{{ expense.expenseDate }}</td>
+              <td class="title-cell">{{ expense.title }}</td>
               <td>
-                {{ expense.expenseType === 'FIXED' ? '고정' : '변동' }}
+                <span class="badge">{{ expense.categoryName }}</span>
               </td>
-              <td class="amount">{{ expense.amount.toLocaleString('ko-KR') }}원</td>
               <td>
-                <div class="button-group">
-                  <button type="button" :disabled="saving || loading" @click="startEdit(expense)">
+                <span class="badge" :class="{ 'type-fixed': expense.expenseType === 'FIXED' }">
+                  {{ expense.expenseType === 'FIXED' ? '고정' : '변동' }}
+                </span>
+              </td>
+              <td class="amount-cell">{{ expense.amount.toLocaleString('ko-KR') }}원</td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="btn btn-edit"
+                    :disabled="saving || loading"
+                    :aria-label="`${expense.title} 수정`"
+                    @click="startEdit(expense)"
+                  >
+                    <Pencil :size="14" aria-hidden="true" />
                     수정
                   </button>
                   <button
                     type="button"
+                    class="btn btn-delete"
                     :disabled="saving || loading"
+                    :aria-label="`${expense.title} 삭제`"
                     @click="deleteExpense(expense)"
                   >
+                    <Trash2 :size="14" aria-hidden="true" />
                     삭제
                   </button>
                 </div>
@@ -313,88 +397,20 @@ onMounted(loadData)
 </template>
 
 <style scoped>
-fieldset {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.expense-table {
+  min-width: 740px;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+.expense-table .title-cell {
+  min-width: 150px;
+  max-width: 280px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-input,
-select,
-textarea {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font: inherit;
-}
-
-.memo-field {
-  margin: 16px 0;
-}
-
-.error {
-  color: #b91c1c;
-}
-
-.list-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.list-heading h2 {
-  margin: 0;
-}
-
-.table-wrap {
-  overflow-x: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th,
-td {
-  padding: 12px;
-  border-bottom: 1px solid #e2e8f0;
-  text-align: left;
-}
-
-.amount {
-  text-align: right;
-  white-space: nowrap;
-}
-
-@media (max-width: 640px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.button-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.button-group button {
-  white-space: nowrap;
+/* 고정 지출 유형을 파란색으로 구분한다. */
+.expense-page .badge.type-fixed {
+  background-color: #eff6ff;
+  color: #2563eb;
 }
 </style>
