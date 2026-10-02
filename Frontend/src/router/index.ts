@@ -12,8 +12,7 @@ const router = createRouter({
     {
       path: '/expenses',
       name: 'expenses',
-      component: () => import('../views/ComingSoonView.vue'),
-      props: { title: '생활비' },
+      component: () => import('../views/ExpenseView.vue'),
     },
     {
       path: '/schedules',
@@ -35,11 +34,6 @@ const router = createRouter({
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('../views/NotFoundView.vue'),
-    },
-    {
-      path: '/expenses',
-      name: 'expenses',
-      component: () => import('../views/ExpenseView.vue'),
     },
     {
       path: '/budgets',

@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { request } from '../api/client'
 import {
+  LayoutDashboard,
   Wallet,
   Coins,
   PiggyBank,
@@ -110,9 +111,14 @@ onMounted(loadData)
 
 <template>
   <main class="dashboard-page">
-    <header class="page-header">
-      <h1>대시보드</h1>
-      <p>우리 집 생활 정보를 한눈에 확인하세요.</p>
+    <header class="crud-page page-heading">
+      <div class="page-icon">
+        <LayoutDashboard :size="28" aria-hidden="true" />
+      </div>
+      <div>
+        <h1>대시보드</h1>
+        <p>우리 집 생활 정보를 한눈에 확인하세요.</p>
+      </div>
     </header>
 
     <p v-if="loading" role="status">대시보드를 불러오는 중입니다.</p>
@@ -289,33 +295,36 @@ onMounted(loadData)
 </template>
 
 <style scoped>
+.crud-page .page-heading,
+.crud-page.page-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.crud-page .page-heading h1,
+.crud-page.page-heading h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.crud-page .page-heading p,
+.crud-page.page-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
 .dashboard-page {
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 28px 24px 48px;
+  min-width: 0;
   color: #1e293b;
 }
 
 .dashboard-page,
 .dashboard-page * {
   box-sizing: border-box;
-}
-
-.page-header {
-  margin-bottom: 28px;
-}
-
-.page-header h1 {
-  margin: 0 0 10px;
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.page-header p {
-  margin: 0;
-  color: #64748b;
-  line-height: 1.6;
 }
 
 .expense-section {
@@ -484,10 +493,6 @@ onMounted(loadData)
 }
 
 @media (max-width: 560px) {
-  .dashboard-page {
-    padding: 20px 12px 32px;
-  }
-
   .expense-section {
     padding: 16px;
   }
@@ -495,10 +500,6 @@ onMounted(loadData)
   .summary-grid {
     grid-template-columns: 1fr;
     gap: 12px;
-  }
-
-  .page-header h1 {
-    font-size: 24px;
   }
 }
 
@@ -629,6 +630,13 @@ onMounted(loadData)
   font-size: 14px;
   line-height: 1.6;
   text-align: center;
+}
+
+@media (max-width: 640px) {
+  .crud-page .page-heading h1,
+  .crud-page.page-heading h1 {
+    font-size: 24px;
+  }
 }
 
 @media (max-width: 960px) {
