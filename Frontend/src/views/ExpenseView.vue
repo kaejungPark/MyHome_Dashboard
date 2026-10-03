@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { request } from '../api/client'
+import { request, requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 import { Wallet, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 생활비 화면의 제목과 주요 동작에 사용할 아이콘
+import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 카테고리 선택 목록에서 사용하는 데이터다.
 interface Category {
@@ -57,25 +59,37 @@ function initialForm() {
 // 폼 입력값을 화면과 동기화한다.
 const form = reactive(initialForm())
 
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+const { canModify } = useDemoGuard(isDemo)
+
 // 오류 원인은 개발자 도구에 기록하고, 화면에는 안내 메시지를 표시한다.
 function showError(error: unknown) {
   console.error(error)
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
-// 카테고리와 지출을 모두 받은 뒤 화면 데이터를 갱신한다.
+// 카테고리와 생활비를 조회한다. 비로그인이면 공통 함수가 샘플을 반환한다.
 async function loadData() {
+  if (loading.value) return
+
   loading.value = true
   errorMessage.value = ''
+  expenses.value = []
+  categories.value = []
+  isDemo.value = false
 
   try {
-    const [categoryData, expenseData] = await Promise.all([
-      request<Category[]>('/api/categories'),
-      request<Expense[]>('/api/expenses'),
+    const demo = createDemoData()
+
+    const [categoryResult, expenseResult] = await Promise.all([
+      requestWithDemo<Category[]>('/api/categories', () => demo.categories),
+      requestWithDemo<Expense[]>('/api/expenses', () => demo.expenses),
     ])
 
-    categories.value = categoryData ?? []
-    expenses.value = expenseData ?? []
+    categories.value = categoryResult.data
+    expenses.value = expenseResult.data
+    isDemo.value = categoryResult.isDemo || expenseResult.isDemo
   } catch (error: unknown) {
     showError(error)
   } finally {
@@ -86,6 +100,7 @@ async function loadData() {
 // 수정 중이면 PUT, 새 등록이면 POST로 저장한다.
 async function saveExpense() {
   if (saving.value) return
+  if (!canModify()) return
 
   errorMessage.value = ''
   notice.value = ''
@@ -159,6 +174,7 @@ function startEdit(expense: Expense) {
 // 지출 삭제. 처리 중 중복 요청을 막는다.
 async function deleteExpense(expense: Expense) {
   if (saving.value || loading.value) return
+  if (!canModify()) return
   if (!window.confirm(`"${expense.title}" 지출을 삭제하시겠습니까?`)) return
 
   saving.value = true
@@ -198,6 +214,10 @@ onMounted(loadData)
         <p>지출을 등록하고 사용 내역을 확인합니다.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
@@ -412,5 +432,14 @@ onMounted(loadData)
 .expense-page .badge.type-fixed {
   background-color: #eff6ff;
   color: #2563eb;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 </style>

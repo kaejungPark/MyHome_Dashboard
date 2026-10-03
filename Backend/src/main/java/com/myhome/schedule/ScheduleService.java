@@ -1,8 +1,6 @@
 package com.myhome.schedule;
 
 import com.myhome.common.validation.DateValidator;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,19 +13,18 @@ import java.util.List;
 public class ScheduleService {
 
     private final ScheduleMapper scheduleMapper;
-    private final Long userId;
     private static final String DATE_RANGE_MESSAGE = "마감일은 시작일보다 빠를 수 없습니다.";
 
-    public ScheduleService(ScheduleMapper scheduleMapper, @Value("${app.user-id}") Long userId) {
+    public ScheduleService(ScheduleMapper scheduleMapper) {
         this.scheduleMapper = scheduleMapper;
-        this.userId = userId;
     }
 
     /**
-     * 설정된 사용자의 일정만 조회한다.
+     * 로그인한 사용자의 일정만 조회한다.
      */
     @Transactional(readOnly = true)
-    public List<ScheduleResponse> getSchedul() {
+    public List<ScheduleResponse> getSchedul(Long userId) {
+
         return scheduleMapper.findSchedule(userId);
     }
 
@@ -36,7 +33,7 @@ public class ScheduleService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void createSchedule(ScheduleSaveRequest request) {
+    public void createSchedule(Long userId, ScheduleSaveRequest request) {
 
         // 저장 전에 시작일과 마감일의 순서를 검증한다.
         DateValidator.validateDateRange(request.startDate(), request.dueDate(), DATE_RANGE_MESSAGE);
@@ -55,7 +52,7 @@ public class ScheduleService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void updateSchedule(Long id, ScheduleSaveRequest request) {
+    public void updateSchedule(Long userId, Long id, ScheduleSaveRequest request) {
 
         if (id <= 0) {
             throw new ResponseStatusException(
@@ -85,7 +82,7 @@ public class ScheduleService {
      * 대상이 없거나 다른 사용자 소유이면 404를 반환한다.
      */
     @Transactional
-    public void deleteSchedule(Long id) {
+    public void deleteSchedule(Long userId, Long id) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "삭제 중 오류가 발생하였습니다."

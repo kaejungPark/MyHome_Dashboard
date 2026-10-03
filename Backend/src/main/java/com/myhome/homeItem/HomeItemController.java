@@ -1,10 +1,12 @@
 package com.myhome.homeItem;
 
+import com.myhome.auth.LoginUser;
 import com.myhome.common.response.ApiResponse;
 import jakarta.validation.Valid;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,20 +19,21 @@ public class HomeItemController {
     public HomeItemController(HomeItemService homeItemService) {this.homeItemService = homeItemService;}
 
     /**
-     * 현재 로그인 기능이 없기에 파라미터에 userId를 받지 않고 작업 추후 추가 예정 Get, Post
      * GET /api/home-item: 물품 목록 조회
      * */
     @GetMapping
-    public ApiResponse<List<HomeItemResponse>> getHomeItem () {
-        return ApiResponse.success(homeItemService.getHomeItem());
+    public ApiResponse<List<HomeItemResponse>> getHomeItem (@AuthenticationPrincipal LoginUser loginUser) {
+        return ApiResponse.success(homeItemService.getHomeItem(loginUser.getId()));
     }
 
     /**
      * POST /api/home-item: 물품 등록
      */
     @PostMapping
-    public ResponseEntity<ApiResponse<Void>> createHomeItem(@Valid @RequestBody HomeItemSaveRequest request) {
-        homeItemService.createHomeItem(request);
+    public ResponseEntity<ApiResponse<Void>> createHomeItem(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @Valid @RequestBody HomeItemSaveRequest request) {
+        homeItemService.createHomeItem(loginUser.getId(), request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(null));
     }
@@ -39,18 +42,23 @@ public class HomeItemController {
      * PUT /api/home-item/{id}: 물품 수정
      */
     @PutMapping("/{id}")
-    public ApiResponse<Void> updateHomeItem(@PathVariable ("id") Long id, @Valid @RequestBody HomeItemSaveRequest request) {
-        homeItemService.updateHomeItem(id, request);
+    public ApiResponse<Void> updateHomeItem(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable ("id") Long id,
+            @Valid @RequestBody HomeItemSaveRequest request) {
+        homeItemService.updateHomeItem(loginUser.getId(), id, request);
 
         return ApiResponse.success(null);
     }
 
     /**
-     * DELETE /api/home-item/{id}: 물품 수정
+     * DELETE /api/home-item/{id}: 물품 삭제
      */
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> deleteHomeItem(@PathVariable ("id") Long id) {
-        homeItemService.deleteHomeItem(id);
+    public ApiResponse<Void> deleteHomeItem(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable ("id") Long id) {
+        homeItemService.deleteHomeItem(loginUser.getId(), id);
 
         return ApiResponse.success(null);
     }

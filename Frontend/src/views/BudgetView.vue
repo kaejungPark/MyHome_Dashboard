@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { request } from '../api/client'
+import { request, requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 import { Coins, Target, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue' // 월별 예산 화면의 제목과 주요 동작에 사용할 아이콘
+import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 월별 예산 조회 결과다.
 interface Budget {
@@ -11,6 +13,10 @@ interface Budget {
   spentAmount: number // 해당 월 지출 합계
   remainingAmount: number | null // 잔여 예산: 초과하면 음수
 }
+
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+const { canModify } = useDemoGuard(isDemo)
 
 // 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
 const now = new Date()
@@ -38,11 +44,17 @@ function resetAmount() {
 async function refreshBudget() {
   budget.value = null
   amount.value = ''
+  isDemo.value = false
 
-  const data = await request<Budget>(`/api/budgets/${month.value}`)
-  if (!data) throw new Error('예산 조회 결과가 없습니다.')
+  const result = await requestWithDemo<Budget>(
+    `/api/budgets/${month.value}`,
+    () => createDemoData(month.value).budget,
+  )
 
-  budget.value = data
+  budget.value = result.data
+  isDemo.value = result.isDemo
+
+  // 조회된 예산 금액을 입력란에도 반영한다.
   resetAmount()
 }
 
@@ -76,6 +88,7 @@ async function loadBudget() {
 // 예산이 미등록이면 POST로 등록하고, 등록돼 있으면 PUT으로 수정한다.
 async function saveBudget() {
   if (busy.value || !budget.value) return
+  if (!canModify()) return
 
   errorMessage.value = ''
   notice.value = ''
@@ -112,6 +125,7 @@ async function saveBudget() {
 // 선택한 월의 예산을 삭제한다. 해당 월의 지출 내역은 삭제하지 않는다.
 async function deleteBudget() {
   if (busy.value || !budget.value?.configured) return
+  if (!canModify()) return
 
   // 사용자가 취소하면 삭제 요청을 보내지 않는다.
   if (!window.confirm(`${month.value} 예산을 삭제하시겠습니까?`)) return
@@ -157,6 +171,10 @@ onMounted(loadBudget)
         <p>월별 예산을 설정하고 지출 금액과 남은 예산을 확인합니다.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
@@ -335,6 +353,15 @@ onMounted(loadBudget)
 /* 초과 금액과 안내 문구를 강조한다. */
 .budget-page .over-budget {
   color: #b91c1c;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 
 @media (max-width: 640px) {

@@ -2,7 +2,6 @@ package com.myhome.statistics;
 
 import com.myhome.budget.BudgetMapper;
 import com.myhome.common.validation.MonthValidator;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,19 +15,17 @@ public class StatisticsService {
 
     private final StatisticsMapper statisticsMapper;
     private final BudgetMapper budgetMapper;
-    private final Long userId;
 
     public StatisticsService (
             StatisticsMapper statisticsMapper,
-            BudgetMapper budgetMapper,
-            @Value("${app.user-id}") Long userId) {
+            BudgetMapper budgetMapper)
+    {
         this.statisticsMapper = statisticsMapper;
         this.budgetMapper = budgetMapper;
-        this.userId = userId;
     }
 
     @Transactional(readOnly = true)
-    public StatisticsResponse findStatistics(String month) {
+    public StatisticsResponse findStatistics(Long userId, String month) {
 
         // 조회 월을 검증하고 해당 월 1일로 변환한다.
         LocalDate monthStart = MonthValidator.parseMonth(month).atDay(1);

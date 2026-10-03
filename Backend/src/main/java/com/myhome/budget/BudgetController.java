@@ -1,10 +1,11 @@
 package com.myhome.budget;
 
+import com.myhome.auth.LoginUser;
 import com.myhome.common.response.ApiResponse;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -18,39 +19,47 @@ public class BudgetController {
         this.budgetService = budgetService;
     }
 
-    /** 현재 로그인 기능이 없기에 파라미터에 userId를 받지 않고 작업 추후 추가 예정 Get, Post  */
-
     // GET /api/budgets/2026-09: 해당 월의 예산과 지출 현황 조회
     @GetMapping("/{month}")
-    public ApiResponse<BudgetResponse> getBudget(@PathVariable("month") String month) {
-        return ApiResponse.success(budgetService.getBudget(month));
+    public ApiResponse<BudgetResponse> getBudget(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable("month") String month) {
+        return ApiResponse.success(budgetService.getBudget(loginUser.getId(), month));
     }
 
     /**
-     * POST /api/budget: 예산 등록
+     * POST /api/budgets/{month}: 예산 등록
      */
     @PostMapping("/{month}")
-    public ResponseEntity<ApiResponse<Void>> createBudget(@PathVariable("month") String month,@Valid @RequestBody BudgetCreateRequest request) {
-        budgetService.createBudget(month, request);
+    public ResponseEntity<ApiResponse<Void>> createBudget(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable("month") String month,
+            @Valid @RequestBody BudgetCreateRequest request) {
+        budgetService.createBudget(loginUser.getId(), month, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.<Void>success(null));
     }
 
     /**
-     * PUT /api/budget/{id}: 예산 수정
+     * PUT /api/budgets/{month}: 예산 수정
      */
     @PutMapping("/{month}")
-    public ResponseEntity<ApiResponse<Void>> updateBudget(@PathVariable("month") String month,@Valid @RequestBody BudgetUpdateRequest request) {
-        budgetService.updateBudget(month, request);
+    public ResponseEntity<ApiResponse<Void>> updateBudget(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable("month") String month,
+            @Valid @RequestBody BudgetUpdateRequest request) {
+        budgetService.updateBudget(loginUser.getId(), month, request);
         return ResponseEntity.ok(ApiResponse.<Void>success(null));
     }
 
     /**
-     * DELETE /api/budget/{id}: 예산 삭제
+     * DELETE /api/budgets/{month}: 예산 삭제
      */
     @DeleteMapping("/{month}")
-    public ResponseEntity<ApiResponse<Void>> deleteBudget(@PathVariable("month") String month) {
-        budgetService.deleteBudget(month);
+    public ResponseEntity<ApiResponse<Void>> deleteBudget(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable("month") String month) {
+        budgetService.deleteBudget(loginUser.getId(), month);
         return ResponseEntity.ok(ApiResponse.<Void>success(null));
     }
 }

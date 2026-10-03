@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { request } from '../api/client'
+import { request, requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 import { Package, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 물품 관리 화면의 제목과 주요 동작에 사용할 아이콘
+import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 물품 상태에 사용할 수 있는 값이다.
 type HomeItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
@@ -18,6 +20,10 @@ interface HomeItem {
   status: HomeItemStatus // 물품 상태
   memo: string | null // 메모
 }
+
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+const { canModify } = useDemoGuard(isDemo)
 
 // 조회 결과와 화면 처리 상태를 관리한다.
 const homeItems = ref<HomeItem[]>([])
@@ -72,10 +78,18 @@ async function loadData() {
 
   loading.value = true
   errorMessage.value = ''
+  homeItems.value = []
+  isDemo.value = false
 
   try {
-    const data = await request<HomeItem[]>(baseUrl)
-    homeItems.value = data ?? []
+    const demo = createDemoData()
+
+    const [homeItemResult] = await Promise.all([
+      requestWithDemo<HomeItem[]>(baseUrl, () => demo.items),
+    ])
+
+    homeItems.value = homeItemResult.data
+    isDemo.value = homeItemResult.isDemo
   } catch (error: unknown) {
     showError(error)
   } finally {
@@ -115,6 +129,7 @@ function startEdit(item: HomeItem) {
 // 신규 등록은 POST, 기존 물품 수정은 PUT으로 저장한다.
 async function saveHomeItem() {
   if (saving.value || loading.value) return
+  if (!canModify()) return
 
   errorMessage.value = ''
   notice.value = ''
@@ -187,6 +202,7 @@ async function saveHomeItem() {
 // 사용자 확인 후 물품을 삭제하고 목록을 갱신한다.
 async function deleteHomeItem(item: HomeItem) {
   if (saving.value || loading.value) return
+  if (!canModify()) return
   if (!window.confirm(`"${item.name}" 물품을 삭제하시겠습니까?`)) return
 
   saving.value = true
@@ -226,6 +242,10 @@ onMounted(loadData)
         <p>집 안 물품의 구매 정보와 보증 기간, 관리 주기를 확인합니다.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
@@ -431,5 +451,14 @@ onMounted(loadData)
   max-width: 280px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 </style>

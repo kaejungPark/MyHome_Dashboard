@@ -1,13 +1,29 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { House, CalendarDays, UserRound, LogIn, ChevronDown, Lightbulb } from '@lucide/vue'
+import { request } from './api/client'
 
 // 현재 경로를 기준으로 선택된 메뉴를 표시한다.
 const route = useRoute()
 
+// 로그인 버튼을 누르면 로그인 화면으로 이동한다.
+const router = useRouter()
+
+// 로그인·회원가입 화면에서는 회원 사이드바를 숨긴다.
+const isAuthPage = computed(() => ['login', 'signup'].includes(String(route.name)))
+
 // MyHome 하위 메뉴의 열림 상태를 관리한다.
 const myHomeMenuOpen = ref(false)
+
+interface LoginUser {
+  id: number
+  email: string
+  nickname: string
+}
+
+// 로그아웃 요청의 중복 실행을 방지한다.
+const loggingOut = ref(false)
 
 // MyHome 메뉴에서 이동할 생활 관리 화면 목록이다.
 const myHomeMenus = [
@@ -34,6 +50,10 @@ const todayLabel = computed(() =>
   }),
 )
 
+const loginUser = ref<LoginUser | null>(null) // 서버 세션에서 확인한 사용자 정보다. 비로그인 상태는 null이다.
+const authLoading = ref(true) // 확인이 끝나기 전에 로그인 버튼이 잠깐 표시되는 것을 방지한다.
+const authError = ref('') // 비로그인 상태와 서버·통신 오류를 구분해 안내한다.
+
 // 화면 해제 시 정리할 날짜 갱신 타이머다.
 let dateTimer: ReturnType<typeof setInterval> | undefined
 
@@ -44,8 +64,69 @@ function closeMenuOutside(event: MouseEvent) {
   }
 }
 
+/**
+ * 앱 최초 진입과 새로고침 시 서버 세션으로 로그인 상태를 확인한다.
+ * 401은 비로그인 상태로 처리하고, 그 외 실패는 오류로 표시한다.
+ * 반환된 사용자 정보는 회원 카드와 모바일 버튼 표시에 사용한다.
+ */
+async function loadLoginUser() {
+  try {
+    const response = await fetch('/api/auth/me')
+
+    // 비로그인은 정상적인 화면 상태로 처리한다.
+    if (response.status === 401) {
+      loginUser.value = null
+      return
+    }
+
+    if (!response.ok) {
+      throw new Error('로그인 상태를 확인하지 못했습니다.')
+    }
+
+    const result = await response.json()
+
+    if (!result.success || !result.data) {
+      throw new Error('로그인 상태를 확인하지 못했습니다.')
+    }
+
+    loginUser.value = result.data
+  } catch {
+    authError.value = '로그인 상태를 확인하지 못했습니다. 새로고침해 주세요.'
+  } finally {
+    authLoading.value = false
+  }
+}
+
+/**
+ * 서버 세션을 종료한 뒤 대시보드를 새로 연다.
+ * 전체 페이지 이동으로 기존 화면에 남아 있는 개인 데이터를 비운다.
+ */
+async function logout() {
+  if (loggingOut.value) return
+
+  loggingOut.value = true
+
+  try {
+    // 로그인 후 갱신된 CSRF 토큰을 받아 로그아웃 요청에 사용한다.
+    // CSRF 토큰은 공통 request()에서 추가한다.
+    await request<void>('/api/auth/logout', {
+      method: 'POST',
+    })
+
+    // 화면에 남아 있는 사용자 데이터를 비우고 비로그인 상태로 다시 연다.
+    window.location.replace('/')
+  } catch {
+    window.alert('로그아웃하지 못했습니다. 다시 시도해 주세요.')
+  } finally {
+    loggingOut.value = false
+  }
+}
+
 // 최초 표시 시 날짜 갱신과 메뉴 바깥 클릭 감지를 시작한다.
 onMounted(() => {
+  // 새로고침하거나 처음 접속할 때 로그인 상태를 확인한다.
+  void loadLoginUser()
+
   dateTimer = setInterval(() => {
     currentDate.value = new Date()
   }, 60_000)
@@ -113,36 +194,57 @@ onUnmounted(() => {
           <span>{{ todayLabel }}</span>
         </div>
 
-        <button type="button" class="mobile-login" disabled aria-label="로그인 준비 중">
-          <LogIn :size="16" aria-hidden="true" />
-          로그인
+        <button
+          v-if="!isAuthPage && !authLoading && !authError && loginUser"
+          type="button"
+          class="mobile-login"
+          :disabled="loggingOut"
+          @click="logout"
+        >
+          {{ loggingOut ? '처리 중...' : '로그아웃' }}
         </button>
       </div>
     </header>
 
-    <div class="page-layout">
-      <aside class="member-sidebar" aria-label="회원 안내">
+    <div class="page-layout" :class="{ 'auth-layout': isAuthPage }">
+      <aside v-if="!isAuthPage" class="member-sidebar" aria-label="회원 안내">
         <section class="member-card">
           <div class="member-avatar">
             <UserRound :size="42" aria-hidden="true" />
           </div>
 
-          <h2>나의 자취 생활</h2>
-          <p class="member-description">
-            생활비부터 일정과 물품까지, MyHome에서 한곳에 관리하세요.
+          <p v-if="authLoading" class="auth-note">로그인 상태 확인 중...</p>
+
+          <p v-else-if="authError" class="auth-note" role="alert">
+            {{ authError }}
           </p>
 
-          <button type="button" class="login-button" disabled>
-            <LogIn :size="18" aria-hidden="true" />
-            로그인
-          </button>
-          <p class="auth-note">회원 기능을 준비하고 있어요.</p>
+          <template v-else-if="loginUser">
+            <h2>{{ loginUser.nickname }}님</h2>
+            <p class="member-description">오늘도 MyHome과 함께 생활을 관리하세요.</p>
 
-          <div class="member-links">
-            <button type="button" disabled>회원가입</button>
-            <span aria-hidden="true">|</span>
-            <button type="button" disabled>비밀번호 찾기</button>
-          </div>
+            <button type="button" class="login-button" :disabled="loggingOut" @click="logout">
+              {{ loggingOut ? '로그아웃 중...' : '로그아웃' }}
+            </button>
+          </template>
+
+          <template v-else>
+            <h2>나의 자취 생활</h2>
+            <p class="member-description">
+              생활비부터 일정과 물품까지, MyHome에서 한곳에 관리하세요.
+            </p>
+
+            <button type="button" class="login-button" @click="router.push('/login')">
+              <LogIn :size="18" aria-hidden="true" />
+              로그인
+            </button>
+
+            <div class="member-links">
+              <RouterLink to="/signup">회원가입</RouterLink>
+              <span aria-hidden="true">|</span>
+              <button type="button" disabled>비밀번호 찾기</button>
+            </div>
+          </template>
         </section>
         <section class="guide-card">
           <Lightbulb :size="24" aria-hidden="true" />
@@ -500,6 +602,11 @@ button:disabled {
     gap: 20px;
     padding: 24px;
   }
+}
+
+/* 로그인 화면은 회원 사이드바 없이 한 열로 표시한다. */
+.page-layout.auth-layout {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* 모바일에서는 회원 카드 대신 상단 로그인 버튼을 표시한다. */

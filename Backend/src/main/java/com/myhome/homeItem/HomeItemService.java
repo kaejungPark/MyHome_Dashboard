@@ -1,7 +1,5 @@
 package com.myhome.homeItem;
 
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,20 +11,19 @@ import java.util.List;
 public class HomeItemService {
 
     private final HomeItemMapper homeItemMapper;
-    private final Long userId;
     private static final String DATE_RANGE_MESSAGE = "구매일은 보증 종료일보다 빠를 수 없습니다.";
 
-    public HomeItemService(HomeItemMapper homeItemMapper, @Value("${app.user-id}") Long userId) {
+    public HomeItemService(HomeItemMapper homeItemMapper) {
         this.homeItemMapper = homeItemMapper;
-        this.userId = userId;
     }
 
 
     /**
-     * 설정된 사용자의 물품을 조회한다.
+     * 로그인한 사용자의 물품을 조회한다.
      */
     @Transactional(readOnly = true)
-    public List<HomeItemResponse> getHomeItem() {
+    public List<HomeItemResponse> getHomeItem(Long userId) {
+
         return homeItemMapper.findHomeItem(userId);
     }
 
@@ -35,7 +32,7 @@ public class HomeItemService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void createHomeItem(HomeItemSaveRequest request) {
+    public void createHomeItem(Long userId, HomeItemSaveRequest request) {
         int insertRow = homeItemMapper.insert(userId, request);
 
         // 정상 등록은 1행이다. 다른 결과이면 예외를 발생시켜 롤백한다.
@@ -49,7 +46,7 @@ public class HomeItemService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void updateHomeItem(Long id, HomeItemSaveRequest request) {
+    public void updateHomeItem(Long userId, Long id, HomeItemSaveRequest request) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "수정 중 오류가 발생하였습니다."
@@ -74,7 +71,7 @@ public class HomeItemService {
      * 대상이 없거나 다른 사용자 소유이면 404를 반환한다.
      */
     @Transactional
-    public void deleteHomeItem(Long id) {
+    public void deleteHomeItem(Long userId, Long id) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "삭제 중 오류가 발생하였습니다."

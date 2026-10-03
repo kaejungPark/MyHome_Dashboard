@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { request } from '../api/client'
+import { request, requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 import { Repeat, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue'
+import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 카테고리 선택 목록이다.
 interface Category {
@@ -34,6 +36,10 @@ interface MonthlyPaymentItem {
   paymentDate: string // 말일 보정이 적용된 납부 예정일
   paymentMethod: string | null // 결제 수단
 }
+
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+const { canModify } = useDemoGuard(isDemo)
 
 // 월별 납부 예정 목록과 합계다.
 interface MonthlyPayment {
@@ -95,14 +101,22 @@ function resetForm() {
 // 조회 실패 시 이전 목록으로 작업하지 못하도록 준비 상태를 해제한다.
 async function refreshManagement() {
   loading.value = false
+  categories.value = []
+  expenses.value = []
+  isDemo.value = false
 
-  const [categoryData, expenseData] = await Promise.all([
-    request<Category[]>('/api/categories'),
-    request<RecurringExpense[]>(baseUrl),
+  const demo = createDemoData()
+
+  const [categoryResult, expenseResult] = await Promise.all([
+    requestWithDemo<Category[]>('/api/categories', () => demo.categories),
+    requestWithDemo<RecurringExpense[]>(baseUrl, () => demo.recurringExpenses),
   ])
 
-  categories.value = categoryData ?? []
-  expenses.value = expenseData ?? []
+  categories.value = categoryResult.data
+  expenses.value = expenseResult.data
+  isDemo.value = categoryResult.isDemo || expenseResult.isDemo
+
+  // 이 화면의 loading은 조회 중이 아니라 목록 준비 완료 여부다.
   loading.value = true
 }
 
@@ -115,10 +129,15 @@ async function refreshMonthly() {
     throw new Error('조회할 월을 선택해 주세요.')
   }
 
-  const data = await request<MonthlyPayment>(`${baseUrl}/monthly/${selectedMonth.value}`)
-  if (!data) throw new Error('월별 납부 예정 조회 결과가 없습니다.')
+  const result = await requestWithDemo<MonthlyPayment>(
+    `${baseUrl}/monthly/${selectedMonth.value}`,
+    () => createDemoData(selectedMonth.value).monthlyPayment,
+  )
 
-  monthly.value = data
+  monthly.value = result.data
+
+  // 관리 목록 또는 월별 목록이 샘플이면 체험 상태를 유지한다.
+  isDemo.value = isDemo.value || result.isDemo
 }
 
 // 최초 진입과 전체 새로고침 시 관리 목록과 예정 목록을 조회한다.
@@ -183,6 +202,7 @@ function startEdit(expense: RecurringExpense) {
 // 등록은 POST, 수정은 PUT으로 같은 형식의 JSON을 전송한다.
 async function saveExpense() {
   if (saving.value || !loading.value) return
+  if (!canModify()) return
 
   errorMessage.value = ''
   notice.value = ''
@@ -248,6 +268,7 @@ async function saveExpense() {
 // 확인을 받은 뒤 선택한 고정 지출 설정을 삭제한다.
 async function deleteExpense(expense: RecurringExpense) {
   if (saving.value || !loading.value) return
+  if (!canModify()) return
   if (!window.confirm(`"${expense.title}" 고정 지출을 삭제하시겠습니까?`)) return
 
   saving.value = true
@@ -290,6 +311,10 @@ onMounted(loadData)
         <p>매달 반복되는 지출과 납부일을 관리하고 월별 예상 금액을 확인합니다.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
@@ -613,5 +638,14 @@ onMounted(loadData)
   max-width: 280px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 </style>

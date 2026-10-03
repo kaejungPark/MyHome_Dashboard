@@ -41,32 +41,42 @@ public interface AuthMapper {
     AuthUser findByEmail(@Param("email") String email);
 
     /**
-     * 비밀번호 해시와 사용자 정보를 저장한다.
-     * 신규 회원의 권한은 USER, 계정 상태는 ACTIVE로 지정한다.
+     * 회원가입 정보를 저장한다.
+     * 나이와 성별은 미입력 시 NULL로 저장한다.
+     * 권한과 계정 상태는 서버에서 USER와 ACTIVE로 지정한다.
      */
     @Insert("""
-        INSERT INTO dbo.[USER] (
-            EMAIL,
-            PASSWORD_HASH,
-            NICKNAME,
-            ROLE,
-            STATUS,
-            CREATED_DT,
-            UPDATED_DT
-        )
-        VALUES (
-            #{email},
-            #{passwordHash},
-            #{nickname},
-            'USER',
-            'ACTIVE',
-            SYSUTCDATETIME(),
-            SYSUTCDATETIME()
-        )
-        """)
+    INSERT INTO dbo.[USER] (
+        EMAIL,
+        PASSWORD_HASH,
+        NAME,
+        NICKNAME,
+        AGE,
+        GENDER,
+        ROLE,
+        STATUS,
+        CREATED_DT,
+        UPDATED_DT
+    )
+    VALUES (
+        #{email},
+        #{passwordHash},
+        #{name,jdbcType=NVARCHAR},
+        #{nickname},
+        #{age,jdbcType=INTEGER},
+        #{gender,jdbcType=VARCHAR},
+        'USER',
+        'ACTIVE',
+        SYSUTCDATETIME(),
+        SYSUTCDATETIME()
+    )
+    """)
     int insert(
             @Param("email") String email,
             @Param("passwordHash") String passwordHash,
-            @Param("nickname") String nickname
+            @Param("name") String name,
+            @Param("nickname") String nickname,
+            @Param("age") Integer age,
+            @Param("gender") String gender
     );
 }

@@ -20,22 +20,19 @@ public class DashboardService {
     private final DashboardMapper dashboardMapper;
     private final StatisticsService statisticsService;
     private final RecurringExpenseService recurringExpenseService;
-    private final Long userId;
 
     public DashboardService (
             DashboardMapper dashboardMapper,
             StatisticsService statisticsService,
-            RecurringExpenseService recurringExpenseService,
-            @Value("${app.user-id}") Long userId)
+            RecurringExpenseService recurringExpenseService)
     {
         this.dashboardMapper = dashboardMapper;
         this.statisticsService = statisticsService;
         this.recurringExpenseService = recurringExpenseService;
-        this.userId =  userId;
     }
 
     @Transactional(readOnly = true)
-    public DashboardResponse findDashboards() {
+    public DashboardResponse findDashboards(Long userId) {
 
         // 조회를 위한 당일날짜 정의
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
@@ -47,13 +44,13 @@ public class DashboardService {
         String month = YearMonth.from(today).toString();
 
         // 기존 통계 서비스를 이용해 이번 달 통계를 조회한다.
-        StatisticsResponse statistics = statisticsService.findStatistics(month);
+        StatisticsResponse statistics = statisticsService.findStatistics(userId, month);
 
         // 반환된 객체에서 필요한 값을 꺼낸다.
         BigDecimal totalAmount = statistics.totalAmount();
 
         // 고정 지출 월별 예정 조회
-        MonthlyResponse monthly = recurringExpenseService.getMonthlyExpenses(month);
+        MonthlyResponse monthly = recurringExpenseService.getMonthlyExpenses(userId, month);
 
         // 오늘 기준 30일 뒤까지 마감되는 미완료 일정을 최대 5개 조회한다.
         List<DashboardScheduleResponse> schedules = dashboardMapper.findSchedules(userId, today, endDate);

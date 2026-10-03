@@ -3,16 +3,13 @@ package com.myhome.recurringexpense;
 import com.myhome.common.validation.DateValidator;
 import com.myhome.common.validation.MonthValidator;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
 
@@ -20,13 +17,11 @@ import java.util.List;
 public class RecurringExpenseService {
 
     private final RecurringExpenseMapper recurringExpenseMapper;
-    private final Long userId;
     private static final String DATE_RANGE_MESSAGE = "종료 월은 시작 월 이후여야 합니다.";
 
 
-    public RecurringExpenseService(RecurringExpenseMapper recurringExpenseMapper, @Value("${app.user-id}") Long userId) {
+    public RecurringExpenseService(RecurringExpenseMapper recurringExpenseMapper) {
         this.recurringExpenseMapper = recurringExpenseMapper;
-        this.userId = userId;
     }
 
     /**
@@ -35,7 +30,7 @@ public class RecurringExpenseService {
      * 월별 적용 기간 필터링은 납부 예정 조회에서 별도로 수행한다.
      */
     @Transactional(readOnly = true)
-    public List<RecurringExpenseResponse> getRecurringExpense() {
+    public List<RecurringExpenseResponse> getRecurringExpense(Long userId) {
         return recurringExpenseMapper.findeRecurringExpense(userId);
     }
 
@@ -44,7 +39,7 @@ public class RecurringExpenseService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void createRecurringExpense(@Valid RecurringExpenseSaveRequest request) {
+    public void createRecurringExpense(Long userId, @Valid RecurringExpenseSaveRequest request) {
 
         // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
         // 종료 월이 없으면 null을 유지한다.
@@ -71,7 +66,7 @@ public class RecurringExpenseService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void updateRecurringExpense(Long id, RecurringExpenseSaveRequest request) {
+    public void updateRecurringExpense(Long userId, Long id, RecurringExpenseSaveRequest request) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "수정 중 오류가 발생하였습니다."
@@ -110,7 +105,7 @@ public class RecurringExpenseService {
      * 대상이 없거나 다른 사용자 소유이면 404를 반환한다.
      */
     @Transactional
-    public void deleterecurringExpense(Long id) {
+    public void deleterecurringExpense(Long userId, Long id) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "올바르지 않은 ID입니다."
@@ -137,7 +132,7 @@ public class RecurringExpenseService {
      * 실제 지출(EXPENSE)을 생성하거나 변경하지 않는다.
      */
     @Transactional(readOnly = true)
-    public MonthlyResponse getMonthlyExpenses(String monthText) {
+    public MonthlyResponse getMonthlyExpenses(Long userId, String monthText) {
         // 기존 월 검증 함수를 사용해 조회 월을 검증한다.
         LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
         YearMonth targetMonth = YearMonth.from(monthStart);

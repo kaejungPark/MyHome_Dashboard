@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref, reactive } from 'vue'
-import { request } from '../api/client'
+import { request, requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 import { CalendarDays, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 일정 관리 화면의 제목과 주요 동작에 사용할 아이콘
+import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 일정 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Schedule {
@@ -14,6 +16,10 @@ interface Schedule {
   completed: boolean
   memo: string | null
 }
+
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+const { canModify } = useDemoGuard(isDemo)
 
 // 조회 결과와 화면 처리 상태를 관리한다.
 const schedules = ref<Schedule[]>([])
@@ -73,11 +79,18 @@ function showError(error: unknown) {
 async function loadData() {
   loading.value = true
   errorMessage.value = ''
+  schedules.value = []
+  isDemo.value = false
 
   try {
-    const [scheduleData] = await Promise.all([request<Schedule[]>('/api/schedules')])
+    const demo = createDemoData()
 
-    schedules.value = scheduleData ?? []
+    const [scheduleResult] = await Promise.all([
+      requestWithDemo<Schedule[]>('/api/schedules', () => demo.schedules),
+    ])
+
+    schedules.value = scheduleResult.data
+    isDemo.value = scheduleResult.isDemo
   } catch (error: unknown) {
     showError(error)
   } finally {
@@ -88,6 +101,7 @@ async function loadData() {
 // 수정 중이면 PUT, 새 등록이면 POST로 저장한다.
 async function saveSchedule() {
   if (saving.value) return
+  if (!canModify()) return
 
   errorMessage.value = ''
   notice.value = ''
@@ -171,6 +185,7 @@ function startEdit(schedule: Schedule) {
 // 일정 삭제. 처리 중 중복 요청을 막는다.
 async function deleteSchedule(schedule: Schedule) {
   if (saving.value || loading.value) return
+  if (!canModify()) return
   if (!window.confirm(`"${schedule.title}" 일정을 삭제하시겠습니까?`)) return
 
   saving.value = true
@@ -208,6 +223,10 @@ onMounted(loadData)
         <p>일정을 등록하고 마감일과 완료 여부를 확인합니다.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <p v-if="errorMessage" class="message error-message" role="alert">
       {{ errorMessage }}
@@ -400,5 +419,14 @@ onMounted(loadData)
 .schedule-page .badge.status-incomplete {
   background-color: #eff6ff;
   color: #b91c1c;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 </style>

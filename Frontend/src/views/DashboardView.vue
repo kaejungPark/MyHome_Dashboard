@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { request } from '../api/client'
 import {
   LayoutDashboard,
   Wallet,
@@ -11,6 +10,8 @@ import {
   CalendarCheck,
   Package,
 } from '@lucide/vue' // 대시보드 요약 카드에 사용할 아이콘
+import { requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 
 // 대시보드에 표시할 일정 요약
 interface DashboardSchedule {
@@ -46,6 +47,9 @@ const dashboard = ref<DashboardResponse | null>(null)
 const loading = ref(false)
 const errorMessage = ref('') // 오류 메시지
 
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+
 // 발생한 오류를 화면에 표시할 메시지로 변환한다.
 function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '통계 조회 중 오류가 발생했습니다.'
@@ -79,29 +83,32 @@ function formatDday(targetDate: string): string {
   return days > 0 ? `D-${days}` : `D+${Math.abs(days)}`
 }
 
-// 대시보드 요약 정보를 조회해 화면 데이터에 저장한다.
+// 공통 함수에서 실제 데이터와 체험 데이터를 구분한다.
 async function findDashboard() {
-  const data = await request<DashboardResponse>('/api/dashboard')
+  const result = await requestWithDemo<DashboardResponse>(
+    '/api/dashboard',
+    () => createDemoData().dashboard,
+  )
 
-  if (!data) throw new Error('조회 결과가 없습니다.')
-
-  dashboard.value = data
+  dashboard.value = result.data
+  isDemo.value = result.isDemo
 }
 
+// 로그인 상태에서는 실제 데이터, 비로그인 상태에서는 샘플을 표시한다.
 async function loadData() {
   if (loading.value) return
 
+  loading.value = true
   errorMessage.value = ''
   dashboard.value = null
-
-  loading.value = true
+  isDemo.value = false
 
   try {
     await findDashboard()
   } catch (error: unknown) {
+    // 서버·통신 오류를 샘플 데이터로 숨기지 않는다.
     showError(error)
   } finally {
-    // 성공·실패 여부와 관계없이 조회 상태를 해제한다.
     loading.value = false
   }
 }
@@ -120,6 +127,10 @@ onMounted(loadData)
         <p>우리 집 생활 정보를 한눈에 확인하세요.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <p v-if="loading" role="status">대시보드를 불러오는 중입니다.</p>
     <p v-else-if="errorMessage" class="error-message" role="alert">
@@ -630,6 +641,15 @@ onMounted(loadData)
   font-size: 14px;
   line-height: 1.6;
   text-align: center;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 
 @media (max-width: 640px) {

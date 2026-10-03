@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { request } from '../api/client'
+import { requestWithDemo } from '../api/client'
+import { createDemoData } from '../mocks/demoData'
 import { ChartPie, Search } from '@lucide/vue'
 
 // 카테고리별 지출 통계
@@ -22,6 +23,9 @@ interface Statistics {
   categories: CategoryStatistics[] // 카테고리별 통계 목록
 }
 
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+
 // 화면에서 사용하는 데이터와 처리 상태다.
 const statistics = ref<Statistics | null>(null)
 const now = new Date() // 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
@@ -41,11 +45,18 @@ function formatAmount(amount: number | null) {
 
 // 선택한 월의 지출·예산·카테고리별 통계를 조회한다.
 async function findStatistics() {
-  const data = await request<Statistics>(`/api/statistics/${selectedMonth.value}`)
+  statistics.value = null
+  isDemo.value = false
 
-  if (!data) throw new Error('통계 조회 결과가 없습니다.')
+  const result = await requestWithDemo<Statistics>(
+    `/api/statistics/${selectedMonth.value}`,
+    () => createDemoData(selectedMonth.value).statistics,
+  )
 
-  statistics.value = data
+  statistics.value = result.data
+
+  // 관리 목록 또는 월별 목록이 샘플이면 체험 상태를 유지한다.
+  isDemo.value = result.isDemo
 }
 
 // 최초 진입과 조회 버튼 클릭 시 통계를 조회한다.
@@ -88,6 +99,10 @@ onMounted(loadStatistics)
         <p>월별 지출과 예산 사용 현황을 확인합니다.</p>
       </div>
     </header>
+
+    <p v-if="isDemo" class="demo-notice" role="status">
+      체험 중이에요. 현재 정보는 샘플 데이터입니다. 로그인하면 내 정보를 관리할 수 있어요.
+    </p>
 
     <section class="card">
       <form class="month-form" @submit.prevent="loadStatistics">
@@ -386,6 +401,15 @@ onMounted(loadStatistics)
   color: #64748b;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.demo-notice {
+  margin: 0 0 24px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #eaf1ff;
+  color: #2563eb;
+  font-size: 14px;
 }
 
 /* 화면 너비에 따라 요약 카드 개수를 조정한다. */

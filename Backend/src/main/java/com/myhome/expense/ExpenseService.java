@@ -2,7 +2,6 @@ package com.myhome.expense;
 
 import com.myhome.category.CategoryMapper;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,24 +15,22 @@ public class ExpenseService {
 
     private final ExpenseMapper expenseMapper;
     private final CategoryMapper categoryMapper;
-    // 로그인 기능 도입 전까지 app.user-id 설정으로 사용하는 개발용 사용자 ID다.
-    private final Long userId;
+
 
     public ExpenseService(
             ExpenseMapper expenseMapper,
-            CategoryMapper categoryMapper,
-            @Value("${app.user-id}") Long userId
+            CategoryMapper categoryMapper
     ) {
         this.expenseMapper = expenseMapper;
         this.categoryMapper = categoryMapper;
-        this.userId = userId;
     }
 
     /**
-     * 설정된 사용자의 지출만 조회한다.
+     * 로그인한 사용자의 지출만 조회한다.
      */
     @Transactional(readOnly = true)
-    public List<ExpenseResponse> getExpenses() {
+    public List<ExpenseResponse> getExpenses(Long userId) {
+
         return expenseMapper.findAllByUserId(userId);
     }
 
@@ -42,7 +39,7 @@ public class ExpenseService {
      * 처리 중 예외가 발생하면 이번 저장을 취소한다.
      */
     @Transactional
-    public void createExpense(ExpenseCreateRequest request) {
+    public void createExpense(Long userId, ExpenseCreateRequest request) {
         if (categoryMapper.countById(request.categoryId()) == 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -62,7 +59,7 @@ public class ExpenseService {
      * 대상이 없거나 다른 사용자의 지출이면 404를 반환한다.
      */
     @Transactional
-    public void updateExpense(Long id, ExpenseUpdateRequest request) {
+    public void updateExpense(Long userId, Long id, ExpenseUpdateRequest request) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "수정 중 오류가 발생하였습니다."
@@ -93,7 +90,7 @@ public class ExpenseService {
      * 대상이 없거나 다른 사용자 소유이면 404를 반환한다.
      */
     @Transactional
-    public void deleteExpense(Long id) {
+    public void deleteExpense(Long userId, Long id) {
         if (id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "올바르지 않은 ID입니다."
