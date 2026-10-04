@@ -35,6 +35,9 @@ interface MonthlyPaymentItem {
   amount: number // 납부 예정 금액
   paymentDate: string // 말일 보정이 적용된 납부 예정일
   paymentMethod: string | null // 결제 수단
+  paid: boolean // 납부 완료 여부
+  expenseId: number | null // 연결된 생활비 ID
+  paidDate: string | null // 실제 납부일
 }
 
 // 비로그인 체험 상태에서만 사용한다.
@@ -58,6 +61,13 @@ const saving = ref(false) // 조회·저장·삭제 처리 중 여부
 const loading = ref(false) // 관리 목록 조회 성공 여부
 const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
+const paymentDates = reactive<Record<number, string>>({}) // 항목별로 입력한 실제 납부일을 보관한다.
+
+// 사용자 기기의 오늘 날짜를 YYYY-MM 형식이 아닌 YYYY-MM-DD로 반환한다.
+function todayDate() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 // UTC 변환 없이 사용자 PC 기준 현재 월을 구한다.
 function currentMonth() {
@@ -125,6 +135,10 @@ async function refreshManagement() {
 async function refreshMonthly() {
   monthly.value = null
 
+  Object.keys(paymentDates).forEach((id) => {
+    delete paymentDates[Number(id)]
+  })
+
   if (!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(selectedMonth.value)) {
     throw new Error('조회할 월을 선택해 주세요.')
   }
@@ -138,6 +152,59 @@ async function refreshMonthly() {
 
   // 관리 목록 또는 월별 목록이 샘플이면 체험 상태를 유지한다.
   isDemo.value = isDemo.value || result.isDemo
+}
+
+// 납부 완료는 POST, 취소는 DELETE로 처리한다.
+async function changePayment(item: MonthlyPaymentItem) {
+  if (saving.value || !monthly.value) return
+  if (!canModify()) return
+
+  errorMessage.value = ''
+  notice.value = ''
+
+  // 화면에 실제로 조회된 월을 사용한다.
+  const month = monthly.value.month
+  const cancel = item.paid
+  const paymentDate = paymentDates[item.id] ?? todayDate()
+
+  if (cancel) {
+    if (!window.confirm(`"${item.title}" 납부를 취소할까요? 연결된 생활비도 삭제됩니다.`)) {
+      return
+    }
+  } else if (!paymentDate || paymentDate > todayDate()) {
+    errorMessage.value = '납부일은 오늘 또는 이전 날짜로 입력해 주세요.'
+    return
+  }
+
+  saving.value = true
+
+  try {
+    const url = `${baseUrl}/${item.id}/payments/${month}`
+
+    await request<null>(
+      url,
+      cancel
+        ? { method: 'DELETE' }
+        : {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentDate }),
+          },
+    )
+
+    notice.value = cancel
+      ? '납부를 취소했습니다. 연결된 생활비도 삭제됐습니다.'
+      : '납부 완료했습니다. 생활비에 반영됐습니다.'
+
+    delete paymentDates[item.id]
+
+    // 처리 결과를 다시 조회해 상태와 실제 납부일을 갱신한다.
+    await refreshMonthly()
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    saving.value = false
+  }
 }
 
 // 최초 진입과 전체 새로고침 시 관리 목록과 예정 목록을 조회한다.
@@ -502,7 +569,7 @@ onMounted(loadData)
       <div class="card-heading">
         <div class="heading-title">
           <Repeat :size="20" aria-hidden="true" />
-          <h2 id="monthly-heading">월별 납부 예정</h2>
+          <h2 id="monthly-heading">월별 납부 현황</h2>
           <span v-if="monthly" class="count-badge"> {{ monthly.items.length }}건 </span>
         </div>
       </div>
@@ -522,7 +589,8 @@ onMounted(loadData)
       </div>
 
       <p class="monthly-description">
-        선택한 월의 납부 예정 금액이며, 실제 납부 여부는 반영하지 않습니다.
+        선택한 월의 납부 상태를 확인합니다. 납부 완료 시 생활비에 반영되며, 합계는 미납 금액이 아닌
+        전체 예정 금액입니다.
       </p>
 
       <p v-if="saving" class="empty-state" role="status">처리 중입니다.</p>
@@ -552,6 +620,9 @@ onMounted(loadData)
                 <th scope="col">카테고리</th>
                 <th scope="col" class="amount-cell">금액</th>
                 <th scope="col">결제 수단</th>
+                <th scope="col">납부 상태</th>
+                <th scope="col">실제 납부일</th>
+                <th scope="col">관리</th>
               </tr>
             </thead>
             <tbody>
@@ -563,6 +634,41 @@ onMounted(loadData)
                 </td>
                 <td class="amount-cell">{{ money(item.amount) }}</td>
                 <td>{{ item.paymentMethod || '—' }}</td>
+                <td>
+                  <span class="badge" :class="{ 'status-active': item.paid }">
+                    {{ item.paid ? '납부 완료' : '미납' }}
+                  </span>
+                </td>
+
+                <td>
+                  <span v-if="item.paid" class="date-cell">
+                    {{ item.paidDate }}
+                  </span>
+
+                  <input
+                    v-else
+                    class="payment-date-input"
+                    type="date"
+                    :value="paymentDates[item.id] ?? todayDate()"
+                    :max="todayDate()"
+                    :disabled="saving"
+                    :aria-label="`${item.title} 실제 납부일`"
+                    @input="paymentDates[item.id] = ($event.target as HTMLInputElement).value"
+                  />
+                </td>
+
+                <td>
+                  <button
+                    type="button"
+                    class="btn"
+                    :class="item.paid ? 'btn-secondary' : 'btn-primary'"
+                    :disabled="saving"
+                    :aria-label="`${item.title} ${item.paid ? '납부 취소' : '납부 완료'}`"
+                    @click="changePayment(item)"
+                  >
+                    {{ item.paid ? '납부 취소' : '납부 완료' }}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -630,7 +736,7 @@ onMounted(loadData)
 }
 
 .monthly-table {
-  min-width: 620px;
+  min-width: 1050px;
 }
 
 .monthly-table .title-cell {
@@ -638,6 +744,10 @@ onMounted(loadData)
   max-width: 280px;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+.payment-date-input {
+  width: 155px;
 }
 
 .demo-notice {

@@ -12,6 +12,10 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.Comparator;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class RecurringExpenseService {
@@ -73,6 +77,9 @@ public class RecurringExpenseService {
             );
         }
 
+        // updateExpense()와 deleteExpense()에 각각 추가
+        validateEditableExpense(userId, id);
+
         // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
         // 종료 월이 없으면 null을 유지한다.
         LocalDate startMonth = MonthValidator.parseMonth(request.startMonth()).atDay(1);
@@ -111,6 +118,17 @@ public class RecurringExpenseService {
                     HttpStatus.BAD_REQUEST, "올바르지 않은 ID입니다."
             );
         }
+        // updateExpense()와 deleteExpense()에 각각 추가
+        validateEditableExpense(userId, id);
+
+        // 납부 기록을 보존하기 위해 삭제 대신 비활성화를 안내한다.
+        if (recurringExpenseMapper.existsPaymentHistory(userId, id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "납부 기록이 있는 고정 지출은 삭제할 수 없습니다. "
+                            + "수정 화면에서 비활성화해 주세요."
+            );
+        }
 
         int deletedRows = recurringExpenseMapper.delete(id, userId);
 
@@ -133,9 +151,19 @@ public class RecurringExpenseService {
      */
     @Transactional(readOnly = true)
     public MonthlyResponse getMonthlyExpenses(Long userId, String monthText) {
+
         // 기존 월 검증 함수를 사용해 조회 월을 검증한다.
         LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
         YearMonth targetMonth = YearMonth.from(monthStart);
+
+        // 고정 지출 ID로 납부 기록을 바로 찾을 수 있도록 Map으로 변환한다.
+        Map<Long, RecurringPaymentResponse> payments =
+                recurringExpenseMapper.findPaymentsByMonth(userId, monthStart)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                RecurringPaymentResponse::recurringExpenseId,
+                                Function.identity()
+                        ));
 
         // 현재 사용자의 고정 지출 목록을 조회한다.
         // 기존 Mapper 메서드 이름에 맞춰 호출한다.
@@ -144,17 +172,19 @@ public class RecurringExpenseService {
 
         List<MonthlyPaymentItem> items = expenses.stream()
                 // 비활성 항목은 납부 예정 금액에서 제외한다.
-                .filter(RecurringExpenseResponse::active)
-
-                // 시작 월부터 종료 월까지 포함한다.
-                // 종료 월이 없으면 시작 월 이후 계속 적용한다.
                 .filter(expense -> {
+                    // 납부 후 비활성화하거나 적용 기간을 바꿔도 납부 이력은 보여준다.
+                    if (payments.containsKey(expense.id())) {
+                        return true;
+                    }
+
                     YearMonth startMonth = YearMonth.parse(expense.startMonth());
                     YearMonth endMonth = expense.endMonth() == null
                             ? null
                             : YearMonth.parse(expense.endMonth());
 
-                    return !targetMonth.isBefore(startMonth)
+                    return expense.active()
+                            && !targetMonth.isBefore(startMonth)
                             && (endMonth == null || !targetMonth.isAfter(endMonth));
                 })
 
@@ -168,6 +198,8 @@ public class RecurringExpenseService {
 
                     LocalDate paymentDate = targetMonth.atDay(paymentDay);
 
+                    RecurringPaymentResponse payment = payments.get(expense.id());
+
                     return new MonthlyPaymentItem(
                             expense.id(),
                             expense.categoryId(),
@@ -175,7 +207,10 @@ public class RecurringExpenseService {
                             expense.title(),
                             expense.amount(),
                             paymentDate,
-                            expense.paymentMethod()
+                            expense.paymentMethod(),
+                            payment != null,
+                            payment == null ? null : payment.expenseId(),
+                            payment == null ? null : payment.paidDate()
                     );
                 })
 
@@ -200,5 +235,136 @@ public class RecurringExpenseService {
                 items
         );
     }
+
+    @Transactional
+    public void completePayment(
+            Long userId,
+            Long id,
+            String month,
+            RecurringPaymentRequest request
+    ) {
+        // 조회 월을 검증하고 해당 월 1일로 변환한다.
+        LocalDate paymentMonth = MonthValidator.parseMonth(month).atDay(1);
+
+        // id와 userId로 고정 지출을 조회한다.
+        RecurringExpenseResponse expense =
+                recurringExpenseMapper.findByIdAndUserId(id, userId);
+
+        // 없거나 다른 사용자 소유라면 404를 반환한다.
+        if (expense == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "고정 지출을 찾을 수 없습니다."
+            );
+        }
+
+        // 활성 상태이며 해당 월이 시작·종료 월 범위에 포함되는지 확인한다.
+        if (!expense.active()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "비활성 상태의 고정 지출은 납부 처리할 수 없습니다."
+            );
+        }
+
+        YearMonth targetMonth = YearMonth.from(paymentMonth);
+        YearMonth startMonth = MonthValidator.parseMonth(expense.startMonth());
+        YearMonth endMonth = expense.endMonth() == null
+                ? null
+                : MonthValidator.parseMonth(expense.endMonth());
+
+        // 시작·종료 월은 포함하며, 종료 월이 없으면 기간 제한을 두지 않는다.
+        if (targetMonth.isBefore(startMonth)
+                || (endMonth != null && targetMonth.isAfter(endMonth))) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "해당 월에 적용되지 않는 고정 지출입니다."
+            );
+        }
+        // 같은 고정 지출의 해당 월 납부 기록이 있는지 확인한다.
+        if (recurringExpenseMapper.existsPayment(userId, id, paymentMonth)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 납부 완료한 항목입니다."
+            );
+        }
+
+        try {
+            // 생활비를 등록하고 생성된 생활비 ID를 받는다.
+            Long expenseId = recurringExpenseMapper.insertPaidExpense(
+                    userId,
+                    expense,
+                    request.paymentDate()
+            );
+
+            if (expenseId == null) {
+                throw new IllegalStateException("생활비 등록 중 오류가 발생했습니다.");
+            }
+
+            // 고정 지출과 생활비를 연결하는 월별 납부 기록을 저장한다.
+            int insertRow = recurringExpenseMapper.insertPayment(
+                    userId,
+                    id,
+                    paymentMonth,
+                    expenseId
+            );
+
+            if (insertRow != 1) {
+                throw new IllegalStateException("납부 기록 등록 중 오류가 발생했습니다.");
+            }
+        } catch (DuplicateKeyException e) {
+            // 동시에 요청되더라도 DB의 UNIQUE 제약조건으로 중복을 차단한다.
+            // 예외를 다시 던져 이번 요청에서 생성한 생활비도 함께 롤백한다.
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 납부 완료한 항목입니다.",
+                    e
+            );
+        }
+    }
+
+    /**
+     * 해당 월의 납부 기록과 연결된 생활비를 함께 삭제한다.
+     * 처리 중 오류가 발생하면 두 삭제 작업을 모두 롤백한다.
+     * 비활성화된 고정 지출도 기존 납부 기록은 취소할 수 있다.
+     */
+    @Transactional
+    public void cancelPayment(Long userId, Long id, String month) {
+        LocalDate paymentMonth = MonthValidator.parseMonth(month).atDay(1);
+
+        // 외래 키로 생활비를 참조하므로 납부 기록부터 삭제한다.
+        Long expenseId = recurringExpenseMapper.deletePayment(
+                userId, id, paymentMonth
+        );
+
+        if (expenseId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "취소할 납부 기록을 찾을 수 없습니다."
+            );
+        }
+
+        // 삭제한 납부 기록에 연결된 생활비만 삭제한다.
+        int deletedRows = recurringExpenseMapper.deletePaidExpense(
+                userId, expenseId
+        );
+
+        if (deletedRows != 1) {
+            throw new IllegalStateException(
+                    "납부 취소 중 생활비 삭제에 실패했습니다."
+            );
+        }
+    }
+
+    /** 납부로 생성된 생활비는 납부 취소 기능으로만 제거할 수 있다. */
+    private void validateEditableExpense(Long userId, Long id) {
+        if (recurringExpenseMapper.existsRecurringPayment(userId, id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "고정 지출 납부로 생성된 생활비입니다. "
+                            + "고정 지출 화면에서 납부를 취소해 주세요."
+            );
+        }
+    }
+
 
 }

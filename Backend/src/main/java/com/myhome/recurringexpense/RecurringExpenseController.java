@@ -76,4 +76,43 @@ public class RecurringExpenseController {
         recurringExpenseService.deleterecurringExpense(loginUser.getId(), id);
         return ApiResponse.success(null);
     }
+
+    /**
+     * 해당 월의 고정 지출을 납부 완료 처리한다.
+     * 사용자 ID는 로그인 정보에서 가져온다.
+     */
+    @PostMapping("/{id}/payments/{month}")
+    public ResponseEntity<ApiResponse<Void>> completePayment(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable("id") Long id,
+            @PathVariable("month") String month,
+            @Valid @RequestBody RecurringPaymentRequest request
+    ) {
+        recurringExpenseService.completePayment(
+                loginUser.getId(),
+                id,
+                month,
+                request
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.<Void>success(null));
+    }
+
+    /**
+     * 해당 월의 납부를 취소한다.
+     * 사용자 ID는 요청 본문이 아닌 로그인 정보에서 가져온다.
+     */
+    @DeleteMapping("/{id}/payments/{month}")
+    public ApiResponse<Void> cancelPayment(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @PathVariable("id") Long id,
+            @PathVariable("month") String month
+    ) {
+        recurringExpenseService.cancelPayment(
+                loginUser.getId(), id, month
+        );
+
+        return ApiResponse.success(null);
+    }
 }

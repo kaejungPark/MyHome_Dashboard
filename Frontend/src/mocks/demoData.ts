@@ -199,6 +199,9 @@ export function createDemoData(selectedMonth?: string) {
       amount: item.amount,
       paymentDate: `${month}-${String(item.paymentDay).padStart(2, '0')}`,
       paymentMethod: item.paymentMethod,
+      paid: false,
+      expenseId: null,
+      paidDate: null,
     }))
     .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate))
 

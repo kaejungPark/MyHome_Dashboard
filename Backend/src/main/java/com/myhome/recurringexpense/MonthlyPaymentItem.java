@@ -10,7 +10,10 @@ public record MonthlyPaymentItem(
         String categoryName,     // 카테고리명
         String title,            // 항목명
         BigDecimal amount,       // 납부 예정 금액
-        LocalDate paymentDate,   // 해당 월의 실제 납부 예정일
-        String paymentMethod     // 결제 수단
+        LocalDate paymentDate,   // 납부 예정일
+        String paymentMethod,// 결제 수단
+        boolean paid,            // 납부 기록이 있으면 true
+        Long expenseId,           // 연결된 생활비 ID, 미납이면 null
+        LocalDate paidDate        // 실제 납부일, 미납이면 null
 ) {
 }

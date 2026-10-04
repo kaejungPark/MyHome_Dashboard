@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * API 요청 처리 중 발생한 예외를 공통 응답 형식으로 변환한다.
@@ -49,6 +50,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                     ? "서버 처리 중 오류가 발생했습니다."
                     : "요청을 처리할 수 없습니다.";
         };
+
+        // 서비스에서 직접 지정한 4xx 안내 메시지는 유지한다.
+        // 5xx 오류의 내부 정보는 사용자에게 노출하지 않는다.
+        if (statusCode.is4xxClientError()
+                && ex instanceof ResponseStatusException statusException
+                && statusException.getReason() != null) {
+            message = statusException.getReason();
+        }
 
         if (statusCode.is5xxServerError()) {
             log.error("Spring MVC 요청 처리 중 서버 오류 발생", ex);
