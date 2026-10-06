@@ -42,6 +42,27 @@ public class StatisticsService {
         // 전체 지출 합계(totalAmount) 계산
         BigDecimal totalAmount = categoryTotals.stream().map(CategoryTotal::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // 전월 1일부터 선택 월 1일 직전까지의 지출을 조회해 합산한다.
+        // 예: 선택 월이 10월이면 9월 1일 이상 ~ 10월 1일 미만
+        LocalDate previousMonthStart = monthStart.minusMonths(1);
+
+        BigDecimal previousMonthAmount = statisticsMapper
+                .findCategoryTotal(userId, previousMonthStart, monthStart)
+                .stream()
+                .map(CategoryTotal::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 선택 월 지출에서 전월 지출을 뺀다.
+        // 양수는 증가, 음수는 감소를 의미한다.
+        BigDecimal changeAmount = totalAmount.subtract(previousMonthAmount);
+
+        // 전월 지출이 0원이면 비교 기준이 없으므로 null을 반환한다.
+        BigDecimal changeRate = previousMonthAmount.signum() == 0
+                ? null
+                : changeAmount
+                .multiply(new BigDecimal("100"))
+                .divide(previousMonthAmount, 2, RoundingMode.HALF_UP);
+
         // 카테고리별 비율(percentage)을 갖는 CategoryStatisticsResponse 리스트 생성
         List<CategoryStatisticsResponse> responses = categoryTotals.stream().map(
                 category -> {
@@ -86,7 +107,10 @@ public class StatisticsService {
                 budget,
                 remainingAmount,
                 usageRate,
-                responses
+                responses,
+                previousMonthAmount,
+                changeAmount,
+                changeRate
         );
     }
 }

@@ -9,6 +9,7 @@ import {
   CalendarDays,
   CalendarCheck,
   Package,
+  BellRing,
 } from '@lucide/vue' // 대시보드 요약 카드에 사용할 아이콘
 import { requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
@@ -28,6 +29,13 @@ interface DashboardItem {
   warrantyEndDate: string
 }
 
+interface DashboardPayment {
+  id: number
+  title: string
+  amount: number
+  paymentDate: string
+}
+
 // 대시보드 API 응답 데이터
 interface DashboardResponse {
   today: string // 조회 기준 날짜
@@ -40,6 +48,7 @@ interface DashboardResponse {
   recurringAmount: number // 고정 지출 예정 합계
   schedules: DashboardSchedule[] // 일정 목록
   items: DashboardItem[] // 물품 목록
+  payments: DashboardPayment[]
 }
 
 // 화면에서 사용하는 데이터와 처리 상태다.
@@ -217,27 +226,65 @@ onMounted(loadData)
       </div>
     </section>
 
-    <!--이번 달 고정 지출 예정-->
-    <section
-      v-if="!loading && !errorMessage && dashboard"
-      class="recurring-section"
-      aria-labelledby="recurring-heading"
-    >
-      <div class="section-header">
-        <div class="section-title">
-          <div class="card-icon heading-icon" aria-hidden="true">
-            <CalendarDays :size="26" />
+    <div v-if="!loading && !errorMessage && dashboard" class="detail-grid">
+      <!-- 이번 달 고정 지출 예정 -->
+      <section class="detail-section" aria-labelledby="recurring-heading">
+        <div class="section-header">
+          <div class="section-title">
+            <div class="card-icon heading-icon" aria-hidden="true">
+              <CalendarDays :size="26" />
+            </div>
+            <h2 id="recurring-heading">이번 달 고정 지출 예정</h2>
           </div>
-          <h2 id="recurring-heading">이번 달 고정 지출 예정</h2>
+
+          <RouterLink to="/recurring-expenses" class="more-link"> 더 보기 &rsaquo; </RouterLink>
         </div>
 
-        <RouterLink to="/recurring-expenses" class="more-link"> 더 보기 &rsaquo; </RouterLink>
-      </div>
+        <p class="amount">{{ formatAmount(dashboard.recurringAmount) }}<span>원</span></p>
 
-      <p class="amount">{{ formatAmount(dashboard.recurringAmount) }}<span>원</span></p>
+        <p class="recurring-note">실제 지출과 별도로 계산한 예정 금액입니다.</p>
+      </section>
+      <!-- 납부일이 가까운 고정 지출 -->
+      <section class="detail-section" aria-labelledby="upcoming-payment-heading">
+        <!-- 오늘부터 7일 이내에 납부할 미납 고정 지출 -->
+        <div class="section-header">
+          <div class="section-title">
+            <div class="card-icon heading-icon" aria-hidden="true">
+              <BellRing :size="26" />
+            </div>
+            <h2 id="upcoming-payment-heading">납부일이 가까운 고정 지출</h2>
+          </div>
 
-      <p class="recurring-note">실제 지출과 별도로 계산한 예정 금액입니다.</p>
-    </section>
+          <RouterLink to="/recurring-expenses" class="more-link"> 더 보기 &rsaquo; </RouterLink>
+        </div>
+
+        <p class="detail-description">오늘부터 7일 이내 · 미납 항목</p>
+
+        <p v-if="dashboard.payments.length === 0" class="empty-message">
+          7일 이내 납부할 미납 항목이 없습니다.
+        </p>
+
+        <ul v-else class="detail-list">
+          <li v-for="payment in dashboard.payments" :key="`${payment.id}-${payment.paymentDate}`">
+            <RouterLink to="/recurring-expenses" class="detail-row payment-link">
+              <div class="detail-info">
+                <span class="detail-name">{{ payment.title }}</span>
+                <span class="payment-amount"> {{ formatAmount(payment.amount) }}원 </span>
+                <time :datetime="payment.paymentDate"> 납부 예정일 {{ payment.paymentDate }} </time>
+              </div>
+
+              <span
+                class="dday-badge"
+                :class="{ 'is-today': payment.paymentDate === dashboard.today }"
+              >
+                {{ formatDday(payment.paymentDate) }}
+              </span>
+            </RouterLink>
+          </li>
+        </ul>
+      </section>
+    </div>
+
     <div v-if="!loading && !errorMessage && dashboard" class="detail-grid">
       <section class="detail-section" aria-labelledby="schedule-heading">
         <div class="section-header">
@@ -544,7 +591,7 @@ onMounted(loadData)
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch; /* start에서 변경 */
   gap: 20px;
   margin-top: 24px;
 }
@@ -650,6 +697,32 @@ onMounted(loadData)
   background: #eaf1ff;
   color: #2563eb;
   font-size: 14px;
+}
+
+.payment-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.payment-link:hover {
+  background-color: #f8fafc;
+}
+
+.payment-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* 각 li 안에 링크가 하나씩 있으므로 기존 마지막 행 규칙을 보정한다. */
+.detail-list > li:not(:last-child) > .payment-link {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.payment-amount {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 @media (max-width: 640px) {

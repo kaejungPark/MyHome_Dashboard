@@ -14,7 +14,8 @@ public record DashboardResponse (
         BigDecimal usageRate,                       // 예산 사용률, 예산 미등록·0원이면 null
         BigDecimal recurringAmount,                 // 이번 달 고정 지출 예정 합계
         List<DashboardScheduleResponse> schedules,  // 마감이 가까운 미완료 일정
-        List<DashboardItemResponse> items           // 보증 종료가 가까운 물품
+        List<DashboardItemResponse> items,          // 보증 종료가 가까운 물품
+        List<UpcomingPaymentResponse> payments
 ) {
 
 }

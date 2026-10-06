@@ -98,4 +98,23 @@ public interface ExpenseMapper {
           AND USER_ID = #{userId}
         """)
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    /**
+     * 현재 사용자의 생활비가 고정 지출 납부 기록에 연결되어 있는지 확인한다.
+     * */
+    @Select("""
+    SELECT CAST(
+        CASE WHEN EXISTS (
+            SELECT 1
+            FROM dbo.RECURRING_PAYMENT
+            WHERE USER_ID = #{userId}
+              AND EXPENSE_ID = #{expenseId}
+        ) THEN 1 ELSE 0 END
+        AS BIT
+    )
+    """)
+    boolean existsRecurringPayment(
+            @Param("userId") Long userId,
+            @Param("expenseId") Long expenseId
+    );
 }

@@ -184,6 +184,15 @@ export function createDemoData(selectedMonth?: string) {
     },
   ]
 
+  const payments = [
+    {
+      id: -401,
+      title: '월세 납부',
+      amount: 300000,
+      paymentDate: addDays(today, 3),
+    },
+  ]
+
   // 고정 지출은 실제 생활비 합계에 중복해서 더하지 않는다.
   const totalAmount = expenses.reduce((sum, item) => sum + item.amount, 0)
   const budgetAmount = 600000
@@ -219,6 +228,12 @@ export function createDemoData(selectedMonth?: string) {
     remainingAmount,
   }
 
+  // 전월 비교 화면을 위한 샘플 금액이다.
+  const previousMonthAmount = 200000
+  const changeAmount = totalAmount - previousMonthAmount
+  // 전월 샘플 금액이 200,000원으로 고정되어 있으므로 바로 계산한다.
+  const changeRate = Number(((changeAmount / previousMonthAmount) * 100).toFixed(2))
+
   const statistics = {
     month,
     totalAmount,
@@ -240,9 +255,14 @@ export function createDemoData(selectedMonth?: string) {
         }
       })
       .sort((a, b) => b.amount - a.amount),
+    previousMonthAmount,
+    changeAmount,
+    changeRate,
   }
 
   const endDate = addDays(today, 30)
+  // 고정 지출 미납 안내는 오늘부터 7일 뒤까지 표시한다.
+  const paymentEndDate = addDays(today, 7)
 
   const dashboard = {
     today,
@@ -277,6 +297,9 @@ export function createDemoData(selectedMonth?: string) {
         name,
         warrantyEndDate,
       })),
+    payments: payments
+      .filter((item) => item.paymentDate >= today && item.paymentDate <= paymentEndDate)
+      .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.id - b.id),
   }
 
   return {

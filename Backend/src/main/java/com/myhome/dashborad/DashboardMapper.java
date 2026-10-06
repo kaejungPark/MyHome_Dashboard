@@ -45,4 +45,41 @@ public interface  DashboardMapper {
             @Param("userId") Long userId,
             @Param("today") LocalDate today,
             @Param("endDate") LocalDate endDate);
+
+
+    @Select("""
+        SELECT
+             r.ID,
+                    r.TITLE,
+                    r.AMOUNT,
+                    d.paymentDate
+                FROM dbo.RECURRING_EXPENSE r
+                CROSS APPLY (
+                    SELECT DATEFROMPARTS(
+                       YEAR(#{paymentMonth}),
+                		MONTH(#{paymentMonth}),
+                        CASE
+                            WHEN r.PAYMENT_DAY > DAY(EOMONTH(#{paymentMonth}))
+                                THEN DAY(EOMONTH(#{paymentMonth}))
+                            ELSE r.PAYMENT_DAY
+                        END
+                    ) AS paymentDate
+                ) d
+                LEFT JOIN dbo.RECURRING_PAYMENT p
+                    ON p.RECURRING_EXPENSE_ID = r.ID
+                   AND p.USER_ID = r.USER_ID
+                   AND p.PAYMENT_MONTH = #{paymentMonth}
+                WHERE r.USER_ID = #{userId}
+                  AND r.IS_ACTIVE = 1
+                  AND r.START_MONTH <= #{paymentMonth}
+                  AND (r.END_MONTH IS NULL OR r.END_MONTH >= #{paymentMonth})
+                  AND d.paymentDate BETWEEN #{today} AND DATEADD(DAY, 7, #{today})
+                  AND p.ID IS NULL
+                ORDER BY d.paymentDate, r.ID;
+        """)
+    List<UpcomingPaymentResponse> findPaymentByUserId(
+            @Param("userId") Long userId,
+            @Param("today")LocalDate today,
+            @Param("paymentMonth") LocalDate paymentMonth
+    );
 }

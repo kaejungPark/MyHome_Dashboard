@@ -21,6 +21,9 @@ interface Statistics {
   remainingAmount: number | null // 잔여 예산
   usageRate: number | null // 예산 사용률
   categories: CategoryStatistics[] // 카테고리별 통계 목록
+  previousMonthAmount: number // 전월 지출
+  changeAmount: number // 증감액
+  changeRate: number | null // 전월 지출이 0원이면 null
 }
 
 // 비로그인 체험 상태에서만 사용한다.
@@ -137,56 +140,103 @@ onMounted(loadStatistics)
     <template v-else-if="statistics">
       <h2 class="result-title">{{ statistics.month }} 통계</h2>
 
-      <section class="summary-grid" aria-label="월별 요약">
-        <article class="card summary-card">
-          <h3>전체 지출</h3>
-          <p class="summary-value">{{ formatAmount(statistics.totalAmount) }}원</p>
-        </article>
+      <div class="statistics-overview">
+        <section class="summary-grid" aria-label="월별 요약">
+          <article class="card summary-card">
+            <h3>전체 지출</h3>
+            <p class="summary-value">{{ formatAmount(statistics.totalAmount) }}원</p>
+          </article>
 
-        <article class="card summary-card">
-          <h3>월 예산</h3>
-          <p class="summary-value">
-            {{ statistics.configured ? `${formatAmount(statistics.budgetAmount)}원` : '미등록' }}
-          </p>
-        </article>
+          <article class="card summary-card">
+            <h3>월 예산</h3>
+            <p class="summary-value">
+              {{ statistics.configured ? `${formatAmount(statistics.budgetAmount)}원` : '미등록' }}
+            </p>
+          </article>
 
-        <article class="card summary-card">
-          <h3>잔여 예산</h3>
-          <p
-            class="summary-value"
-            :class="{
-              'over-budget': statistics.remainingAmount !== null && statistics.remainingAmount < 0,
-            }"
-          >
-            {{
-              statistics.remainingAmount === null
-                ? '—'
-                : `${formatAmount(statistics.remainingAmount)}원`
-            }}
-          </p>
-          <p
-            v-if="statistics.remainingAmount !== null && statistics.remainingAmount < 0"
-            class="summary-note over-budget"
-          >
-            예산을 초과했습니다.
-          </p>
-        </article>
+          <article class="card summary-card">
+            <h3>잔여 예산</h3>
+            <p
+              class="summary-value"
+              :class="{
+                'over-budget':
+                  statistics.remainingAmount !== null && statistics.remainingAmount < 0,
+              }"
+            >
+              {{
+                statistics.remainingAmount === null
+                  ? '—'
+                  : `${formatAmount(statistics.remainingAmount)}원`
+              }}
+            </p>
+            <p
+              v-if="statistics.remainingAmount !== null && statistics.remainingAmount < 0"
+              class="summary-note over-budget"
+            >
+              예산을 초과했습니다.
+            </p>
+          </article>
 
-        <article class="card summary-card">
-          <h3>예산 사용률</h3>
-          <p
-            class="summary-value"
-            :class="{
-              'over-budget': statistics.usageRate !== null && statistics.usageRate > 100,
-            }"
-          >
-            {{ statistics.usageRate === null ? '—' : `${statistics.usageRate.toFixed(2)}%` }}
-          </p>
-          <p v-if="statistics.configured && statistics.budgetAmount === 0" class="summary-note">
-            예산이 0원이므로 사용률을 계산하지 않습니다.
-          </p>
-        </article>
-      </section>
+          <article class="card summary-card">
+            <h3>예산 사용률</h3>
+            <p
+              class="summary-value"
+              :class="{
+                'over-budget': statistics.usageRate !== null && statistics.usageRate > 100,
+              }"
+            >
+              {{ statistics.usageRate === null ? '—' : `${statistics.usageRate.toFixed(2)}%` }}
+            </p>
+            <p v-if="statistics.configured && statistics.budgetAmount === 0" class="summary-note">
+              예산이 0원이므로 사용률을 계산하지 않습니다.
+            </p>
+          </article>
+        </section>
+
+        <section class="card comparison-section" aria-labelledby="comparison-heading">
+          <!-- 선택 월과 전월의 실제 지출 비교 -->
+          <section class="card comparison-section" aria-labelledby="comparison-heading">
+            <div class="card-heading">
+              <div class="heading-title">
+                <ChartPie :size="20" aria-hidden="true" />
+                <h2 id="comparison-heading">전월 대비 지출</h2>
+              </div>
+            </div>
+
+            <p>전월 지출: {{ formatAmount(statistics.previousMonthAmount) }}원</p>
+
+            <p
+              class="summary-value"
+              :class="{
+                'spending-up': statistics.changeAmount > 0,
+                'spending-down': statistics.changeAmount < 0,
+              }"
+            >
+              <template v-if="statistics.changeAmount === 0"> 전월과 동일 </template>
+              <template v-else>
+                {{ formatAmount(Math.abs(statistics.changeAmount)) }}원
+                {{ statistics.changeAmount > 0 ? '증가' : '감소' }}
+              </template>
+            </p>
+
+            <p class="summary-note">
+              <template v-if="statistics.changeRate === null">
+                전월 지출이 없어 증감률을 계산할 수 없습니다.
+              </template>
+              <template v-else-if="statistics.changeAmount === 0"> 증감률 0% </template>
+              <template v-else>
+                전월 대비 {{ Math.abs(statistics.changeRate).toFixed(2) }}%
+                {{ statistics.changeAmount > 0 ? '증가' : '감소' }}
+              </template>
+            </p>
+
+            <p class="summary-note">
+              선택 월과 전월의 월별 누적 지출을 비교합니다. 진행 중인 월은 현재까지 등록된 지출
+              기준입니다.
+            </p>
+          </section>
+        </section>
+      </div>
 
       <p v-if="!statistics.configured" class="info-message">
         해당 월의 예산이 등록되지 않았습니다.
@@ -286,11 +336,25 @@ onMounted(loadStatistics)
   font-size: 20px;
 }
 
-/* 월별 요약 카드 */
+/* 왼쪽 요약 카드와 오른쪽 전월 비교를 같은 높이로 배치한다. */
+.statistics-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  align-items: stretch;
+  gap: 24px;
+}
+
+/* 요약 카드 4개를 2열 × 2행으로 배치한다. */
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+/* 공통 카드 여백을 제거해 왼쪽 영역과 높이를 맞춘다. */
+.statistics-page .comparison-section {
+  min-width: 0;
+  margin: 0;
 }
 
 .statistics-page .summary-card {
@@ -412,10 +476,21 @@ onMounted(loadStatistics)
   font-size: 14px;
 }
 
+.spending-up {
+  color: #dc2626;
+}
+
+.spending-down {
+  color: #047857;
+}
+
 /* 화면 너비에 따라 요약 카드 개수를 조정한다. */
 @media (max-width: 960px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .statistics-overview {
+    grid-template-columns: 1fr;
   }
 }
 

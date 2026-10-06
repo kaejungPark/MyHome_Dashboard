@@ -66,6 +66,9 @@ public class ExpenseService {
             );
         }
 
+        // 고정 지출 납부로 생성된 생활비는 직접 수정·삭제하지 못하게 한다.
+        validateEditableExpense(userId, id);
+
         if (categoryMapper.countById(request.categoryId()) == 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "존재하지 않는 카테고리입니다."
@@ -97,6 +100,9 @@ public class ExpenseService {
             );
         }
 
+        // 고정 지출 납부로 생성된 생활비는 직접 수정·삭제하지 못하게 한다.
+        validateEditableExpense(userId, id);
+
         int deletedRows = expenseMapper.deleteByIdAndUserId(id, userId);
 
         if (deletedRows == 0) {
@@ -107,6 +113,17 @@ public class ExpenseService {
 
         if (deletedRows != 1) {
             throw new IllegalStateException("지출 삭제 중 오류가 발생하였습니다.");
+        }
+    }
+
+    /** 납부로 생성된 생활비는 납부 취소 기능으로만 제거할 수 있다. */
+    private void validateEditableExpense(Long userId, Long id) {
+        if (expenseMapper.existsRecurringPayment(userId, id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "고정 지출 납부로 생성된 생활비입니다. "
+                            + "고정 지출 화면에서 납부를 취소해 주세요."
+            );
         }
     }
 }

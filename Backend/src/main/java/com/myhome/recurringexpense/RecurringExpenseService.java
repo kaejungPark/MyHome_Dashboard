@@ -77,9 +77,6 @@ public class RecurringExpenseService {
             );
         }
 
-        // updateExpense()와 deleteExpense()에 각각 추가
-        validateEditableExpense(userId, id);
-
         // 요청의 YYYY-MM 문자열을 DB 저장용 해당 월 1일로 변환한다.
         // 종료 월이 없으면 null을 유지한다.
         LocalDate startMonth = MonthValidator.parseMonth(request.startMonth()).atDay(1);
@@ -118,8 +115,6 @@ public class RecurringExpenseService {
                     HttpStatus.BAD_REQUEST, "올바르지 않은 ID입니다."
             );
         }
-        // updateExpense()와 deleteExpense()에 각각 추가
-        validateEditableExpense(userId, id);
 
         // 납부 기록을 보존하기 위해 삭제 대신 비활성화를 안내한다.
         if (recurringExpenseMapper.existsPaymentHistory(userId, id)) {
@@ -236,6 +231,12 @@ public class RecurringExpenseService {
         );
     }
 
+    /**
+     * 해당 월의 고정 지출을 납부 완료 처리한다.
+     * 본인 소유 여부, 활성 상태, 적용 기간과 중복 납부 여부를 확인한다.
+     * 실제 납부일로 생활비를 생성하고, 해당 생활비와 연결된 납부 기록을 저장한다.
+     * 처리 중 예외가 발생하면 생활비와 납부 기록 저장을 모두 롤백한다.
+     */
     @Transactional
     public void completePayment(
             Long userId,
@@ -354,17 +355,5 @@ public class RecurringExpenseService {
             );
         }
     }
-
-    /** 납부로 생성된 생활비는 납부 취소 기능으로만 제거할 수 있다. */
-    private void validateEditableExpense(Long userId, Long id) {
-        if (recurringExpenseMapper.existsRecurringPayment(userId, id)) {
-            throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "고정 지출 납부로 생성된 생활비입니다. "
-                            + "고정 지출 화면에서 납부를 취소해 주세요."
-            );
-        }
-    }
-
 
 }

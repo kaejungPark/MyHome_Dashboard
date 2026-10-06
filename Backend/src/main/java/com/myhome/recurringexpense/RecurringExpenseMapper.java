@@ -223,7 +223,9 @@ public interface RecurringExpenseMapper {
             @Param("expenseId") Long expenseId
     );
 
-    /** 현재 사용자의 해당 월 납부 기록을 조회한다. */
+    /**
+     * 현재 사용자의 해당 월 납부 기록을 조회한다.
+     * */
     @Select("""
     SELECT
         p.RECURRING_EXPENSE_ID AS recurringExpenseId,
@@ -263,7 +265,9 @@ public interface RecurringExpenseMapper {
             @Param("paymentMonth") LocalDate paymentMonth
     );
 
-    /** 납부 취소한 기록에 연결된 현재 사용자의 생활비를 삭제한다. */
+    /**
+     * 납부 취소한 기록에 연결된 현재 사용자의 생활비를 삭제한다.
+     * */
     @Delete("""
     DELETE FROM dbo.EXPENSE
     WHERE ID = #{expenseId}
@@ -274,24 +278,9 @@ public interface RecurringExpenseMapper {
             @Param("expenseId") Long expenseId
     );
 
-    /** 현재 사용자의 생활비가 고정 지출 납부 기록에 연결되어 있는지 확인한다. */
-    @Select("""
-    SELECT CAST(
-        CASE WHEN EXISTS (
-            SELECT 1
-            FROM dbo.RECURRING_PAYMENT
-            WHERE USER_ID = #{userId}
-              AND EXPENSE_ID = #{expenseId}
-        ) THEN 1 ELSE 0 END
-        AS BIT
-    )
-    """)
-    boolean existsRecurringPayment(
-            @Param("userId") Long userId,
-            @Param("expenseId") Long expenseId
-    );
-
-    /** 현재 사용자의 고정 지출에 납부 기록이 하나라도 있는지 확인한다. */
+    /**
+     * 현재 사용자의 고정 지출에 납부 기록이 하나라도 있는지 확인한다.
+     * */
     @Select("""
     SELECT CAST(
         CASE WHEN EXISTS (
