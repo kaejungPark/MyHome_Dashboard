@@ -45,9 +45,12 @@ public class SecurityConfig  {
                                 "/api/auth/signup",
                                 "/api/auth/login"
                         ).permitAll()
+                        // CSRF 토큰과 커뮤니티 목록·상세 조회는 비로그인 사용자도 접근할 수 있다.
                         .requestMatchers(
                                 HttpMethod.GET,
-                                "/api/auth/csrf"
+                                "/api/auth/csrf",
+                                "/api/community",
+                                "/api/community/{id}"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
