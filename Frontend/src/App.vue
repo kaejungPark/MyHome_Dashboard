@@ -183,10 +183,9 @@ onUnmounted(() => {
             통계
           </RouterLink>
 
-          <button type="button" class="nav-link" disabled>
+          <RouterLink to="community" class="nav-link" exact-active-class="is-active">
             커뮤니티
-            <span class="coming-label">예정</span>
-          </button>
+          </RouterLink>
         </nav>
 
         <div class="header-date">
