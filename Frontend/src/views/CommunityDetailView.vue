@@ -35,6 +35,14 @@ const baseUrl = '/api/community'
 const deleting = ref(false) // 삭제 중 중복 요청 방지
 const deleteError = ref('') // 삭제 실패 안내
 
+type ReportReason = 'SPAM' | 'ABUSE' | 'INAPPROPRIATE' | 'OTHER'
+const reportDialog = ref<HTMLDialogElement | null>(null)
+const reportReason = ref<ReportReason>('SPAM')
+const reportDescription = ref('')
+const reporting = ref(false)
+const reportError = ref('')
+const reportMessage = ref('')
+
 // 로그인 사용자와 게시글 작성자가 같으면 본인 글이다.
 const isOwner = computed(
   () => loginUserId.value !== null && details.value?.userId === loginUserId.value,
@@ -44,13 +52,12 @@ const isOwner = computed(
 const canReport = computed(
   () => loginUserId.value !== null && details.value !== null && !isOwner.value && !authError.value,
 )
-type ReportReason = 'SPAM' | 'ABUSE' | 'INAPPROPRIATE' | 'OTHER'
-const reportDialog = ref<HTMLDialogElement | null>(null)
-const reportReason = ref<ReportReason>('SPAM')
-const reportDescription = ref('')
-const reporting = ref(false)
-const reportError = ref('')
-const reportMessage = ref('')
+
+// 발생한 오류를 화면에 표시할 메시지로 변환한다.
+function showError(error: unknown) {
+  errorMessage.value =
+    error instanceof Error ? error.message : '게시글 조회 중 오류가 발생했습니다.'
+}
 
 // 새 신고를 시작할 때 이전 입력과 안내를 초기화한다.
 function openReport() {
@@ -93,12 +100,6 @@ async function submitReport() {
   } finally {
     reporting.value = false
   }
-}
-
-// 발생한 오류를 화면에 표시할 메시지로 변환한다.
-function showError(error: unknown) {
-  errorMessage.value =
-    error instanceof Error ? error.message : '게시글 조회 중 오류가 발생했습니다.'
 }
 
 // 게시글 ID를 검증하고 상세 정보를 조회
@@ -250,7 +251,7 @@ onMounted(loadData)
       <footer class="post-actions">
         <RouterLink to="/community" class="btn btn-secondary"> 목록으로 </RouterLink>
 
-        <button v-if="canReport" type="button" class="btn btn-delete" @click="openReport">
+        <button v-if="canReport" type="button" class="btn btn-secondary" @click="openReport">
           신고
         </button>
 
