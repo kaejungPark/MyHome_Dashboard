@@ -1,5 +1,6 @@
 package com.myhome.config;
 
+import jakarta.servlet.http.HttpServlet;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -52,7 +53,10 @@ public class SecurityConfig  {
                                 "/api/community",
                                 "/api/community/{id}"
                         ).permitAll()
+                        // 관리자 API는 ADMIN 권한을 가진 사용자만 접근할 수 있다.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
+
                 )
 
                 // POST /api/auth/login의 폼 데이터(email, password)를 읽어 인증한다.
