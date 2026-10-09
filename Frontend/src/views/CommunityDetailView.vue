@@ -40,6 +40,61 @@ const isOwner = computed(
   () => loginUserId.value !== null && details.value?.userId === loginUserId.value,
 )
 
+// 로그인한 사용자는 다른 사람의 게시글만 신고할 수 있다.
+const canReport = computed(
+  () => loginUserId.value !== null && details.value !== null && !isOwner.value && !authError.value,
+)
+type ReportReason = 'SPAM' | 'ABUSE' | 'INAPPROPRIATE' | 'OTHER'
+const reportDialog = ref<HTMLDialogElement | null>(null)
+const reportReason = ref<ReportReason>('SPAM')
+const reportDescription = ref('')
+const reporting = ref(false)
+const reportError = ref('')
+const reportMessage = ref('')
+
+// 새 신고를 시작할 때 이전 입력과 안내를 초기화한다.
+function openReport() {
+  if (!canReport.value || reporting.value) return
+  reportReason.value = 'SPAM'
+  reportDescription.value = ''
+  reportError.value = ''
+  reportMessage.value = ''
+  reportDialog.value?.showModal()
+}
+
+// 전송 중에는 팝업을 유지해 처리 결과를 확인할 수 있게 한다.
+function closeReport() {
+  if (!reporting.value) reportDialog.value?.close()
+}
+
+async function submitReport() {
+  if (reporting.value || !canReport.value || !details.value) return
+  reportError.value = ''
+  const description = reportDescription.value.trim()
+  if (description.length > 1000) {
+    reportError.value = '상세 설명은 1,000자 이내로 입력해 주세요.'
+    return
+  }
+
+  reporting.value = true
+  try {
+    // 공통 요청 함수가 CSRF 토큰을 첨부하며, 신고자 ID는 서버에서 판단한다.
+    await request<null>(`${baseUrl}/${details.value.id}/reports`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reportReason.value, description: description || null }),
+    })
+    reportDialog.value?.close()
+    reportMessage.value = '신고가 접수되었습니다.'
+  } catch (error: unknown) {
+    // 중복 신고를 포함한 서버 오류 메시지를 팝업 안에 표시한다.
+    reportError.value = error instanceof Error ? error.message : '신고 접수에 실패했습니다.'
+    if (error instanceof ApiError && error.status === 401) loginUserId.value = null
+  } finally {
+    reporting.value = false
+  }
+}
+
 // 발생한 오류를 화면에 표시할 메시지로 변환한다.
 function showError(error: unknown) {
   errorMessage.value =
@@ -190,8 +245,14 @@ onMounted(loadData)
         {{ deleteError }}
       </p>
 
+      <p v-if="reportMessage" class="report-success" role="status">{{ reportMessage }}</p>
+
       <footer class="post-actions">
         <RouterLink to="/community" class="btn btn-secondary"> 목록으로 </RouterLink>
+
+        <button v-if="canReport" type="button" class="btn btn-delete" @click="openReport">
+          신고
+        </button>
 
         <!-- 실제 권한 검사는 수정·삭제 API에서도 수행한다. -->
         <div v-if="isOwner" class="owner-actions">
@@ -220,6 +281,54 @@ onMounted(loadData)
       </footer>
     </article>
   </section>
+
+  <!-- 네이티브 dialog로 팝업 밖의 조작을 막고 키보드 초점을 유지한다. -->
+  <Teleport to="body">
+    <dialog
+      ref="reportDialog"
+      class="report-dialog"
+      aria-labelledby="report-title"
+      @cancel="reporting && $event.preventDefault()"
+    >
+      <form @submit.prevent="submitReport" :aria-busy="reporting">
+        <h2 id="report-title">게시글 신고</h2>
+        <p class="report-help">신고 사유를 선택해 주세요. 접수된 내용은 관리자가 확인합니다.</p>
+        <fieldset :disabled="reporting">
+          <label for="report-reason">신고 사유</label>
+          <select id="report-reason" v-model="reportReason" required>
+            <option value="SPAM">스팸·홍보</option>
+            <option value="ABUSE">욕설·비방</option>
+            <option value="INAPPROPRIATE">부적절한 내용</option>
+            <option value="OTHER">기타</option>
+          </select>
+          <label for="report-description">상세 설명 (선택)</label>
+          <textarea
+            id="report-description"
+            v-model="reportDescription"
+            rows="5"
+            maxlength="1000"
+            placeholder="신고 내용을 설명해 주세요."
+            aria-describedby="report-count"
+          ></textarea>
+          <p id="report-count" class="report-count">{{ reportDescription.length }} / 1,000자</p>
+        </fieldset>
+        <p v-if="reportError" class="message error-message" role="alert">{{ reportError }}</p>
+        <div class="report-actions">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="reporting"
+            @click="closeReport"
+          >
+            취소
+          </button>
+          <button type="submit" class="btn btn-primary" :disabled="reporting || !canReport">
+            {{ reporting ? '접수 중…' : '신고하기' }}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  </Teleport>
 </template>
 <style scoped>
 .post-header {
@@ -278,5 +387,72 @@ onMounted(loadData)
   .post-title {
     font-size: 20px;
   }
+}
+/* 작은 화면에서도 팝업 내용과 버튼에 접근할 수 있도록 크기를 제한한다. */
+.report-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid #dbe3ef;
+  border-radius: 16px;
+  color: #1e293b;
+  background: #fff;
+}
+.report-dialog::backdrop {
+  background: rgb(15 23 42 / 45%);
+}
+.report-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+.report-help {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.report-dialog fieldset {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  margin: 20px 0;
+  border: 0;
+}
+.report-dialog label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.report-dialog select,
+.report-dialog textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: inherit;
+  background: #fff;
+  font: inherit;
+}
+.report-dialog textarea {
+  resize: vertical;
+}
+.report-count {
+  margin: 0;
+  text-align: right;
+  color: #64748b;
+  font-size: 12px;
+}
+.report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.report-success {
+  padding: 12px 16px;
+  color: #166534;
+  background: #f0fdf4;
+  border-radius: 8px;
 }
 </style>

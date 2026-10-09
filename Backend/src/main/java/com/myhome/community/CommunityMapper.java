@@ -1,5 +1,6 @@
 package com.myhome.community;
 
+import jakarta.validation.Valid;
 import org.apache.ibatis.annotations.*;
 
 import java.util.List;
@@ -17,13 +18,15 @@ public interface CommunityMapper {
     FROM dbo.COMMUNITY c
     JOIN dbo.[USER] u ON u.ID = c.USER_ID
     <where>
+        /* 숨김 처리되지 않은 게시글만 조회 (기본 조건) */
+        c.IS_HIDDEN = 0
         <if test="keyword != null and keyword != ''">
             <choose>
                 <when test="searchType == 'NICKNAME'">
-                    CHARINDEX(#{keyword,jdbcType=NVARCHAR}, u.NICKNAME) > 0
+                    AND CHARINDEX(#{keyword,jdbcType=NVARCHAR}, u.NICKNAME) > 0
                 </when>
                 <otherwise>
-                    CHARINDEX(#{keyword,jdbcType=NVARCHAR}, c.TITLE) > 0
+                    AND CHARINDEX(#{keyword,jdbcType=NVARCHAR}, c.TITLE) > 0
                 </otherwise>
             </choose>
         </if>
@@ -36,7 +39,7 @@ public interface CommunityMapper {
     );
 
     /**
-     * 검색 조건에 맞는 게시글을 최신순으로 페이지 조회한다.
+     * 검색 조건에 맞는 게시글을 최신순으로 페이지 조회한다. (숨김 글 제외)
      * 본문은 제외하며, 목록 조회에서는 조회수를 증가시키지 않는다.
      */
     @Select("""
@@ -50,13 +53,16 @@ public interface CommunityMapper {
     FROM dbo.COMMUNITY c
     JOIN dbo.[USER] u ON u.ID = c.USER_ID
     <where>
+        /* 숨김 처리되지 않은 게시글만 조회 (기본 조건) */
+        c.IS_HIDDEN = 0
+        /* 키워드 검색 조건이 있는 경우 추가 */
         <if test="keyword != null and keyword != ''">
             <choose>
                 <when test="searchType == 'NICKNAME'">
-                    CHARINDEX(#{keyword,jdbcType=NVARCHAR}, u.NICKNAME) > 0
+                    AND CHARINDEX(#{keyword,jdbcType=NVARCHAR}, u.NICKNAME) > 0
                 </when>
                 <otherwise>
-                    CHARINDEX(#{keyword,jdbcType=NVARCHAR}, c.TITLE) > 0
+                    AND CHARINDEX(#{keyword,jdbcType=NVARCHAR}, c.TITLE) > 0
                 </otherwise>
             </choose>
         </if>
@@ -85,6 +91,9 @@ public interface CommunityMapper {
                 c.TITLE AS title,
                 c.CONTENT AS content,
                 c.VIEW_COUNT AS viewCount,
+                c.IS_HIDDEN AS isHidden,
+                c.HIDDEN_DT AS hiddenDt,
+                c.HIDDEN_BY AS hiddenBy,
                 c.CREATED_DT AS createdDt,
                 c.UPDATED_DT AS updatedDt
             FROM dbo.COMMUNITY c
@@ -122,6 +131,7 @@ public interface CommunityMapper {
                 UPDATED_DT = SYSUTCDATETIME()
             WHERE ID = #{id}
               AND USER_ID = #{userId}
+              AND IS_HIDDEN = 0
             """)
     int update(
             @Param("userId") Long userId,
@@ -136,6 +146,7 @@ public interface CommunityMapper {
             DELETE FROM dbo.COMMUNITY
             WHERE ID = #{id}
               AND USER_ID = #{userId}
+              AND IS_HIDDEN = 0
             """)
     int delete(
             @Param("userId") Long userId,
@@ -149,6 +160,64 @@ public interface CommunityMapper {
             UPDATE dbo.COMMUNITY
             SET VIEW_COUNT = VIEW_COUNT + 1
             WHERE ID = #{id}
+            AND IS_HIDDEN = 0
     """)
     int increaseViewCount(@Param("id") Long id);
+
+
+    /***
+     * 같은 사용자의 기존 신고가 있는지 확인
+     */
+
+    @Select("""
+        SELECT CASE
+           WHEN EXISTS (
+               SELECT 1 
+               FROM dbo.COMMUNITY_REPORT
+               WHERE REPORTER_ID = #{userId} 
+                 AND COMMUNITY_ID = #{id}
+           ) THEN 1 
+           ELSE 0 
+       END
+        """)
+    boolean existsReport(
+            @Param("userId") Long userId,
+            @Param("id") Long id
+    );
+
+    /**
+     * 신고 등록
+     * */
+    @Insert("""
+            INSERT INTO dbo.COMMUNITY_REPORT (
+                COMMUNITY_ID,
+                REPORTER_ID,
+                REASON,
+                DESCRIPTION
+            )
+            VALUES (
+                #{id},
+                #{userId},
+                #{request.reason},
+                #{request.description,jdbcType=NVARCHAR}
+            )
+            """)
+    int insertReport(@Param("id") Long id,
+                     @Param("userId") Long userId,
+                     @Param("request") ReportSaveRequest request);
+
+    /**
+     * 특정 게시글의 전체 신고 이력 존재 여부 확인 (신고자/상태 조건 없이 체크)
+     */
+    @Select("""
+            SELECT CASE
+                       WHEN EXISTS (
+                           SELECT 1
+                           FROM dbo.COMMUNITY_REPORT
+                           WHERE COMMUNITY_ID = #{id}
+                       ) THEN 1
+                       ELSE 0
+                   END
+            """)
+    boolean existsReportHistory(@Param("id") Long id);
 }

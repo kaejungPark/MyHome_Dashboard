@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.util.List;
 
@@ -99,14 +100,43 @@ public class CommunityService {
         // 증가된 조회수가 포함된 상세 정보를 조회한다.
         CommunityDetailResponse community = communityMapper.findCommunity(id);
 
-        if (community == null) {
+        if (community == null || community.isHidden()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "없거나 숨김 처리된 게시글입니다."
+            );
+        }
+
+        return community;
+    }
+
+    /**
+     * 수정 폼에 표시할 본인 게시글 정보를 조회한다.
+     * 게시글이 없거나 작성자가 로그인 사용자와 다르면 404를 반환한다.
+     * 수정 준비를 위한 조회이므로 조회수는 증가시키지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public CommunityDetailResponse getEdit(Long userId, Long id) {
+        // 게시글 ID로 기존 정보를 조회한다.
+        CommunityDetailResponse community = communityMapper.findCommunity(id);
+
+        // 게시글이 없으면 404를 반환한다.
+        if (community == null || community.isHidden()) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "없거나 숨김 처리된 게시글입니다."
+            );
+        }
+
+        // 로그인 사용자와 작성자가 같으면 반환하고, 다르면 404를 반환한다.
+        if (userId.equals(community.userId())) {
+            return community;
+        } else {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "게시글을 찾을 수 없습니다."
             );
         }
-
-        return community;
     }
 
     /**
@@ -149,7 +179,8 @@ public class CommunityService {
 
     /**
      * 로그인한 사용자가 작성한 게시글을 삭제한다.
-     * 대상이 없거나 다른 사용자의 글이면 404를 반환한다.
+     * 게시글이 없거나 숨김 상태이거나 본인 글이 아니면 404를 반환한다.
+     * 신고 이력이 있으면 기록 보존을 위해 삭제를 차단하고 409를 반환한다.
      */
     @Transactional
     public void deleteCommunity(Long userId, Long id) {
@@ -157,6 +188,23 @@ public class CommunityService {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "삭제 중 오류가 발생하였습니다."
             );
+        }
+
+        // 게시글 ID로 기존 정보를 조회한다.
+        CommunityDetailResponse community = communityMapper.findCommunity(id);
+
+        // 게시글이 없거나 숨김 상태이거나 본인 글이 아니면 삭제를 차단한다.
+        if (community == null || community.isHidden()
+                || !community.userId().equals(userId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "게시글을 찾을 수 없습니다."
+            );
+        }
+
+        // 신고 처리 상태와 관계없이 신고 이력이 있는 게시글은 삭제를 차단한다.
+        if (communityMapper.existsReportHistory(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "신고 이력이 있는 게시글은 삭제할 수 없습니다.");
         }
 
         int deleteRow = communityMapper.delete(userId, id);
@@ -173,4 +221,59 @@ public class CommunityService {
     }
 
 
+    /**
+     * 게시글 존재 여부, 숨김 상태, 본인 글 여부와 중복 신고를 검사한 뒤 저장한다.
+     * 동시에 접수된 중복 신고도 DB UNIQUE 제약조건을 통해 차단한다.
+     */
+    @Transactional
+    public void createReport(Long userId, Long id, @Valid ReportSaveRequest request) {
+        // 게시글 ID로 기존 정보를 조회한다.
+        CommunityDetailResponse community = communityMapper.findCommunity(id);
+
+        if (community == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "게시글을 찾을 수 없습니다."
+            );
+        }
+
+        // 게시글이 존재하고 숨김 상태가 아닌지 확인.
+        if (community.isHidden()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "숨김 처리된 게시글은 신고할 수 없습니다."
+            );
+        }
+
+        // 본인 글이면 신고 거절.
+        if (community.userId().equals(userId))  {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "본인이 작성한 게시글은 신고할 수 없습니다."
+            );
+        }
+
+        // 존재 여부만 boolean으로 확인
+        if (communityMapper.existsReport(userId, id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "기존 신고가 존재합니다."
+            );
+        }
+
+        try {
+            int insertRow = communityMapper.insertReport(id, userId, request);
+
+            if (insertRow != 1) {
+                throw new IllegalStateException("신고 등록 중 오류가 발생했습니다.");
+            }
+        } catch (DuplicateKeyException e) {
+            // 사전 검사 이후 동시에 들어온 중복 신고도 409로 응답한다.
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 신고한 게시글입니다.",
+                    e
+            );
+        }
+    }
 }

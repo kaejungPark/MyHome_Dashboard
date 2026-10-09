@@ -10,6 +10,9 @@ public record CommunityDetailResponse(
         String title,             // 게시글 제목
         String content,           // 게시글 본문
         Long viewCount,           // 조회수
+        boolean isHidden,        // 숨김 여부: true이면 숨김
+        LocalDateTime hiddenDt,   // 숨김 처리 일시, 미처리이면 null
+        Long hiddenBy,            // 처리한 관리자 ID, 처음에는 NULL
         LocalDateTime createdDt,  // 작성 일시: DB의 UTC 기준
         LocalDateTime updatedDt   // 마지막 수정 일시: DB의 UTC 기준
 ) {

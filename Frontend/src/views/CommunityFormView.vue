@@ -59,7 +59,7 @@ async function loadForm(rawId: unknown) {
     }
 
     if (editingId.value !== null) {
-      const detail = await request<CommunityDetail>(`${baseUrl}/${editingId.value}`)
+      const detail = await request<CommunityDetail>(`${baseUrl}/${editingId.value}/edit`)
 
       if (detail === null) {
         throw new Error('게시글 상세 응답이 없습니다.')
