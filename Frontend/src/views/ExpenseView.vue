@@ -82,6 +82,7 @@ async function loadData() {
   try {
     const demo = createDemoData()
 
+    // 서로 독립적인 카테고리와 지출 목록을 동시에 요청하고, 모두 성공하면 화면에 반영한다.
     const [categoryResult, expenseResult] = await Promise.all([
       requestWithDemo<Category[]>('/api/categories', () => demo.categories),
       requestWithDemo<Expense[]>('/api/expenses', () => demo.expenses),
@@ -89,6 +90,7 @@ async function loadData() {
 
     categories.value = categoryResult.data
     expenses.value = expenseResult.data
+    // 둘 중 하나라도 체험 데이터이면 화면을 체험 상태로 처리해 변경 요청을 막는다.
     isDemo.value = categoryResult.isDemo || expenseResult.isDemo
   } catch (error: unknown) {
     showError(error)
@@ -186,6 +188,7 @@ async function deleteExpense(expense: Expense) {
       method: 'DELETE',
     })
 
+    // 수정 중이던 지출을 삭제했다면 폼도 초기화해 삭제된 항목을 다시 저장하지 않도록 한다.
     if (editingId.value === expense.id) {
       resetForm()
     }

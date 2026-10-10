@@ -76,6 +76,8 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
+// 일정 목록을 조회하고, 비로그인 응답이면 공통 함수가 반환한 체험 데이터를 표시한다.
+// 조회를 시작할 때 이전 목록을 비워 오류 발생 시 오래된 정보가 남지 않도록 한다.
 async function loadData() {
   loading.value = true
   errorMessage.value = ''
@@ -197,6 +199,7 @@ async function deleteSchedule(schedule: Schedule) {
       method: 'DELETE',
     })
 
+    // 수정 중이던 일정을 삭제했다면 수정 대상과 입력값도 초기화한다.
     if (editingId.value === schedule.id) {
       resetForm()
     }
@@ -210,6 +213,7 @@ async function deleteSchedule(schedule: Schedule) {
   }
 }
 
+// 화면이 처음 표시되면 일정 목록을 조회한다.
 onMounted(loadData)
 </script>
 <template>

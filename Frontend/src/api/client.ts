@@ -82,12 +82,14 @@ export async function request<T>(url: string, options?: RequestInit): Promise<T 
     throw new Error(result.message ?? '요청 처리에 실패했습니다.')
   }
 
+  // 공통 응답 껍데기를 제외한 data만 반환한다. 화면에서 success나 message를 다시 읽지 않는다.
   return result.data
 }
 
 /**
- * 로그인 상태에서는 API 데이터, 비로그인 상태에서는 샘플을 반환한다.
- * 조회 전용이며 서버 오류·통신 오류는 그대로 전달한다.
+ * 조회 성공 시 실제 데이터를, 401 응답일 때만 체험 데이터를 반환한다.
+ * 서버·통신 오류와 다른 HTTP 오류는 호출한 화면으로 전달한다.
+ * 조회 전용이며 등록·수정·삭제 요청에는 사용하지 않는다.
  */
 export async function requestWithDemo<T>(
   url: string,

@@ -26,6 +26,8 @@ const form = reactive({
 
 const loading = ref(true)
 const saving = ref(false)
+// 로그인 확인과 수정 데이터 준비가 끝난 경우에만 저장을 허용한다.
+// 준비 실패 또는 저장 완료 후에는 false로 유지해 잘못된 제출을 막는다.
 const ready = ref(false)
 const loginRequired = ref(false)
 const errorMessage = ref('')
@@ -59,6 +61,7 @@ async function loadForm(rawId: unknown) {
     }
 
     if (editingId.value !== null) {
+      // 수정 전용 API를 사용해 폼을 여는 것만으로 조회수가 증가하지 않도록 한다.
       const detail = await request<CommunityDetail>(`${baseUrl}/${editingId.value}/edit`)
 
       if (detail === null) {
@@ -143,6 +146,7 @@ function cancelForm() {
 
 // 같은 폼 컴포넌트에서 등록·수정 경로가 바뀌어도 새로 준비한다.
 onBeforeRouteUpdate(async (to) => {
+  // 조회·저장 중에는 같은 폼의 다른 경로로 전환하지 않아 입력 상태가 섞이지 않게 한다.
   if (saving.value || loading.value) return false
 
   await loadForm(to.params.id)

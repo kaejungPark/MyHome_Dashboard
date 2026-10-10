@@ -2,8 +2,9 @@ import type { Ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 /**
- * 체험 화면에서 데이터 변경을 시도하면 로그인으로 안내한다.
- * true이면 작업을 계속하고, false이면 중단한다.
+ * 체험 상태에서 변경 작업을 시도하면 로그인 화면으로 안내한다.
+ * 반환 객체의 canModify()가 true이면 작업을 계속하고, false이면 중단한다.
+ * 화면의 변경 동작을 제어하며, 실제 인증·권한 검사는 서버에서 수행한다.
  */
 export function useDemoGuard(isDemo: Ref<boolean>) {
   const router = useRouter()

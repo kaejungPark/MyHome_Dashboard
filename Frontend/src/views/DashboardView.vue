@@ -29,6 +29,7 @@ interface DashboardItem {
   warrantyEndDate: string
 }
 
+// 납부일이 가까운 미납 고정 지출의 요약 정보다.
 interface DashboardPayment {
   id: number
   title: string
@@ -48,7 +49,7 @@ interface DashboardResponse {
   recurringAmount: number // 고정 지출 예정 합계
   schedules: DashboardSchedule[] // 일정 목록
   items: DashboardItem[] // 물품 목록
-  payments: DashboardPayment[]
+  payments: DashboardPayment[] // 조회 기준일부터 7일 뒤까지 납부 예정인 미납 항목
 }
 
 // 화면에서 사용하는 데이터와 처리 상태다.
@@ -80,7 +81,7 @@ function toUtcDate(dateText: string): number {
   return date.getTime()
 }
 
-// 기준 날짜와 대상 날짜를 비교해 D-day를 표시한다.
+// 대시보드 응답의 기준 날짜로 남은 일수를 계산해 표시된 데이터와 날짜 기준을 맞춘다.
 function formatDday(targetDate: string): string {
   if (!dashboard.value) return '—'
 

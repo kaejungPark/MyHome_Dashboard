@@ -199,6 +199,8 @@ export function createDemoData(selectedMonth?: string) {
   const remainingAmount = budgetAmount - totalAmount
   const usageRate = (totalAmount / budgetAmount) * 100
 
+  // 체험용 고정 지출을 월별 납부 예정 목록으로 변환한다.
+  // 모든 항목은 미납 상태로 시작하며 납부 예정일 순으로 정렬한다.
   const monthlyItems = recurringExpenses
     .map((item) => ({
       id: item.id,

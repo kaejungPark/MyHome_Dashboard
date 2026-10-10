@@ -35,7 +35,7 @@ const baseUrl = '/api/community'
 const deleting = ref(false) // 삭제 중 중복 요청 방지
 const deleteError = ref('') // 삭제 실패 안내
 
-type ReportReason = 'SPAM' | 'ABUSE' | 'INAPPROPRIATE' | 'OTHER'
+type ReportReason = 'SPAM' | 'ABUSE' | 'INAPPROPRIATE' | 'OTHER' // 서버에서 허용하는 신고 사유 코드다. 화면의 한글 선택 항목과 연결한다.
 const reportDialog = ref<HTMLDialogElement | null>(null)
 const reportReason = ref<ReportReason>('SPAM')
 const reportDescription = ref('')
@@ -43,7 +43,10 @@ const reporting = ref(false)
 const reportError = ref('')
 const reportMessage = ref('')
 
-// 로그인 사용자와 게시글 작성자가 같으면 본인 글이다.
+/**
+ * 로그인 사용자와 게시글 작성자가 같으면 본인 글이다.
+ * 버튼 표시를 위한 판단이며, 실제 수정·삭제 권한은 서버에서 다시 검사한다.
+ */
 const isOwner = computed(
   () => loginUserId.value !== null && details.value?.userId === loginUserId.value,
 )
@@ -74,6 +77,11 @@ function closeReport() {
   if (!reporting.value) reportDialog.value?.close()
 }
 
+/**
+ * 다른 사용자의 게시글에 대한 신고를 접수한다.
+ * 전송 중에는 재요청을 막고, 비어 있는 상세 설명은 null로 전달한다.
+ * 성공하면 팝업을 닫고, 실패하면 입력을 유지한 채 오류를 표시한다.
+ */
 async function submitReport() {
   if (reporting.value || !canReport.value || !details.value) return
   reportError.value = ''
@@ -96,6 +104,7 @@ async function submitReport() {
   } catch (error: unknown) {
     // 중복 신고를 포함한 서버 오류 메시지를 팝업 안에 표시한다.
     reportError.value = error instanceof Error ? error.message : '신고 접수에 실패했습니다.'
+    // 세션이 만료됐으면 화면의 로그인 정보도 해제해 신고 재전송을 막는다.
     if (error instanceof ApiError && error.status === 401) loginUserId.value = null
   } finally {
     reporting.value = false

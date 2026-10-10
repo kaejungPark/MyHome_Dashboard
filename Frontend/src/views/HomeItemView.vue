@@ -72,7 +72,7 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
-// 현재 사용자의 물품 목록을 조회한다.
+// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 물품 목록을 표시한다.
 async function loadData() {
   if (loading.value) return
 

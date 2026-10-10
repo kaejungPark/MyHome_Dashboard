@@ -28,7 +28,7 @@ const keyword = ref('')
 const appliedSearchType = ref<SearchType>('TITLE')
 const appliedKeyword = ref('')
 
-// 페이지 관련
+// 현재 페이지와 페이지당 개수, 서버에서 반환한 전체 개수·페이지 수를 관리한다.
 const page = ref(1)
 const size = ref(10)
 const totalCount = ref(0)
@@ -42,6 +42,11 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
+/**
+ * 검색 버튼으로 확정한 조건과 현재 페이지로 게시글을 조회한다.
+ * 조회 실패 시 이전 결과가 남지 않도록 목록과 페이지 정보를 먼저 초기화한다.
+ * 커뮤니티는 비로그인 사용자도 실제 게시글을 조회하므로 체험 데이터를 사용하지 않는다.
+ */
 async function refreshCommunity() {
   communities.value = []
   totalCount.value = 0
@@ -55,7 +60,7 @@ async function refreshCommunity() {
     keyword: appliedKeyword.value,
   })
 
-  // 조회할 API가 하나이므로 Promise.all은 필요 없다.
+  // 게시글 목록과 페이징 정보를 하나의 응답으로 받는다.
   const result = await request<PageResponse<Community>>(`${baseUrl}?${params.toString()}`)
 
   if (result === null) {
@@ -123,7 +128,7 @@ async function loadData() {
   }
 }
 
-// 화면이 처음 표시되면 물품 목록을 조회한다.
+// 화면이 처음 표시되면 기본 검색 조건으로 게시글 목록을 조회한다.
 onMounted(loadData)
 </script>
 <template>

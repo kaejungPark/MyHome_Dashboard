@@ -17,7 +17,7 @@ const form = reactive({
 })
 
 const message = ref('')
-const saving = ref(false) // 중복 제출을 방지하고 가입 완료 상태를 관리한다.
+const saving = ref(false) // 회원가입과 자동 로그인 처리 중 중복 제출을 방지한다.
 const completed = ref(false) // 가입 성공 후 자동 로그인에 실패하더라도 중복 가입을 막는다.
 
 /**
@@ -35,6 +35,8 @@ async function submitSignup() {
     return
   }
 
+  // BCrypt 입력 제한에 맞춰 글자 수가 아닌 UTF-8 바이트 수를 검사한다.
+  // 한글·이모지 등은 한 글자가 여러 바이트일 수 있다.
   if (new TextEncoder().encode(form.password).length > 72) {
     message.value = '비밀번호가 너무 깁니다. 조금 더 짧게 입력해 주세요.'
     return
@@ -75,6 +77,7 @@ async function submitSignup() {
     } catch {
       message.value = '회원가입은 완료됐습니다. 로그인 화면에서 로그인해 주세요.'
     } finally {
+      // 가입 완료 후 자동 로그인 성공 여부와 관계없이 폼의 비밀번호 값을 비운다.
       form.password = ''
       form.passwordConfirm = ''
     }

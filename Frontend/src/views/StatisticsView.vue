@@ -22,8 +22,8 @@ interface Statistics {
   usageRate: number | null // 예산 사용률
   categories: CategoryStatistics[] // 카테고리별 통계 목록
   previousMonthAmount: number // 전월 지출
-  changeAmount: number // 증감액
-  changeRate: number | null // 전월 지출이 0원이면 null
+  changeAmount: number // 선택 월 지출 - 전월 지출: 양수는 증가, 음수는 감소
+  changeRate: number | null // 전월 대비 증감률(%): 전월 지출이 0원이면 계산하지 않는다.
 }
 
 // 비로그인 체험 상태에서만 사용한다.
@@ -46,7 +46,7 @@ function formatAmount(amount: number | null) {
   return amount === null ? '—' : amount.toLocaleString('ko-KR')
 }
 
-// 선택한 월의 지출·예산·카테고리별 통계를 조회한다.
+// 선택한 월의 지출·예산·카테고리별 통계와 전월 대비 증감 정보를 조회한다.
 async function findStatistics() {
   statistics.value = null
   isDemo.value = false
@@ -58,7 +58,7 @@ async function findStatistics() {
 
   statistics.value = result.data
 
-  // 관리 목록 또는 월별 목록이 샘플이면 체험 상태를 유지한다.
+  // 이번 통계 조회 결과가 체험 데이터인지 화면에 반영한다.
   isDemo.value = result.isDemo
 }
 

@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+// 각 화면 컴포넌트는 해당 경로에 진입할 때 불러온다.
+// 게시글 등록과 수정은 CommunityFormView를 공유하고 경로의 ID 유무로 구분한다.
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
 

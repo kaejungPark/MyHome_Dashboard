@@ -57,13 +57,13 @@ const categories = ref<Category[]>([]) // 카테고리 선택 목록
 const expenses = ref<RecurringExpense[]>([]) // 활성·비활성을 포함한 관리 목록
 const monthly = ref<MonthlyPayment | null>(null) // 월별 예정 목록과 합계
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
-const saving = ref(false) // 조회·저장·삭제 처리 중 여부
-const loading = ref(false) // 관리 목록 조회 성공 여부
+const saving = ref(false) // 조회·등록·수정·삭제·납부 처리 중 중복 실행을 막는다.
+const loading = ref(false) // 관리 목록과 카테고리 조회가 성공하면 true가 된다.
 const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
 const paymentDates = reactive<Record<number, string>>({}) // 항목별로 입력한 실제 납부일을 보관한다.
 
-// 사용자 기기의 오늘 날짜를 YYYY-MM 형식이 아닌 YYYY-MM-DD로 반환한다.
+// 사용자 기기의 오늘 날짜를 YYYY-MM-DD 형식으로 반환한다.
 function todayDate() {
   const date = new Date()
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -135,6 +135,7 @@ async function refreshManagement() {
 async function refreshMonthly() {
   monthly.value = null
 
+  // 이전 조회에서 입력한 납부일이 다른 월의 항목에 남지 않도록 초기화한다.
   Object.keys(paymentDates).forEach((id) => {
     delete paymentDates[Number(id)]
   })
@@ -162,7 +163,7 @@ async function changePayment(item: MonthlyPaymentItem) {
   errorMessage.value = ''
   notice.value = ''
 
-  // 화면에 실제로 조회된 월을 사용한다.
+  // 선택창 값이 아니라 현재 표시된 목록의 월을 사용해 다른 월의 납부 처리를 방지한다.
   const month = monthly.value.month
   const cancel = item.paid
   const paymentDate = paymentDates[item.id] ?? todayDate()
