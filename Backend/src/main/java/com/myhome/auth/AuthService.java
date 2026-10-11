@@ -60,9 +60,8 @@ public class AuthService {
         String passwordHash = passwordEncoder.encode(request.password());
 
         /**
-         * 회원가입 정보를 저장한다.
          * 이름·나이·성별은 미입력 시 NULL로 저장한다.
-         * 비밀번호는 해시만 저장하며 권한과 상태는 USER·ACTIVE로 지정한다.
+         * 비밀번호는 해시만 저장하며, 가입 계정의 권한과 상태는 USER·ACTIVE로 지정한다.
          */
         int insertRow = authMepper.insert(
                 email,

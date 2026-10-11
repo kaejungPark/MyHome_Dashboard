@@ -15,6 +15,12 @@ public class AdminCommunityService {
     public AdminCommunityService (AdminCommunityMapper adminCommunityMapper) {
         this.adminCommunityMapper = adminCommunityMapper;
     }
+
+    /**
+     * 관리자가 확인할 신고 목록을 상태별로 페이지 조회한다.
+     * ALL이면 상태 조건 없이 조회하며, 숨김 게시글의 신고도 포함한다.
+     * 조회 범위를 벗어난 페이지는 빈 목록으로 반환한다.
+     */
     @Transactional(readOnly = true)
     public PageResponse<AdminReportListResponse> getReports(int page, int size, String status) {
         // 페이지와 페이지 크기를 검증한다.
@@ -25,6 +31,7 @@ public class AdminCommunityService {
             );
         }
 
+        // 상태값의 앞뒤 공백을 제거하고, 서비스에 null이나 빈 값이 전달되면 전체 조회로 처리한다.
         String statusType = status == null || status.isBlank() ? "ALL" : status.trim();
 
         if (!statusType.equals("ALL") &&
@@ -133,6 +140,8 @@ public class AdminCommunityService {
 
         // 기각한 경우에는 게시글의 현재 공개·숨김 상태를 변경하지 않는다.
         if ("RESOLVED".equals(request.status())) {
+            // 신고 ID가 아닌 신고 대상 게시글 ID로 숨김 처리한다.
+            // 이미 숨겨진 게시글은 기존 숨김 처리자와 처리일을 유지한다.
             int hiddenRows = adminCommunityMapper.hideCommunity(
                     adminId, report.communityId()
             );

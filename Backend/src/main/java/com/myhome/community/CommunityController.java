@@ -91,6 +91,11 @@ public class CommunityController {
         return ApiResponse.success(null);
     }
 
+    /**
+     * 로그인한 사용자가 다른 사람의 게시글을 신고한다.
+     * 신고자 ID는 로그인 정보에서 가져오고, 신고 내용은 요청 본문으로 받는다.
+     * 신고 접수에 성공하면 201을 반환한다.
+     */
     @PostMapping("/{id}/reports")
     public ResponseEntity<ApiResponse<Void>> createReport (
             @AuthenticationPrincipal LoginUser loginUser,

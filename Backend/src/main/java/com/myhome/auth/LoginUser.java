@@ -27,7 +27,7 @@ public class LoginUser extends User {
                 true,                  // 계정 만료 정책은 아직 적용하지 않는다.
                 true,                  // 비밀번호 만료 정책은 아직 적용하지 않는다.
                 true,                  // 별도의 잠금 정책은 아직 적용하지 않는다.
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.role()))
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.role())) // DB의 USER·ADMIN 값을 Security가 검사할 ROLE_USER·ROLE_ADMIN 권한으로 변환한다.
         );
 
         this.id = user.id();

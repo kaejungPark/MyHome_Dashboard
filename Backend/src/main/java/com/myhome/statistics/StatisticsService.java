@@ -24,6 +24,12 @@ public class StatisticsService {
         this.budgetMapper = budgetMapper;
     }
 
+    /**
+     * 로그인한 사용자의 선택 월 지출·예산과 카테고리별 비율을 조회한다.
+     * 전월 지출을 함께 집계해 증감액과 증감률을 계산한다.
+     * 전월 지출이 0원이면 증감률은 null로 반환한다.
+     * 진행 중인 월은 현재까지 등록된 지출을 기준으로 계산한다.
+     */
     @Transactional(readOnly = true)
     public StatisticsResponse findStatistics(Long userId, String month) {
 

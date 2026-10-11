@@ -11,9 +11,10 @@ import java.util.List;
 public interface AdminCommunityMapper {
 
     /**
-    * 상태 조건에 맞는 신고 내역 전체 수를 조회한다.
-    * status가 ALL인 경우 전체 개수를 반환한다.
-    */
+     * 상태 조건에 맞는 신고 내역 전체 수를 조회한다.
+     * status가 ALL인 경우 전체 개수를 반환한다.
+     * statusType이 ALL이면 상태 조건을 적용하지 않는다.
+     */
     @Select("""
     <script>
     SELECT COUNT_BIG(*)
@@ -33,6 +34,7 @@ public interface AdminCommunityMapper {
     /**
      * 상태 조건에 맞는 신고 내역을 최신순으로 페이지 조회한다.
      * status가 ALL인 경우 전체 목록을 조회한다.
+     * statusType이 ALL이면 상태 조건을 적용하지 않는다.
      */
     @Select("""
     <script>
@@ -66,6 +68,7 @@ public interface AdminCommunityMapper {
     /**
      * 신고 내용, 대상 게시글, 신고자·작성자와 처리 이력을 조회한다.
      * 관리자 조회이므로 숨김 여부와 신고 상태에 따른 제한을 두지 않는다.
+     * 신고자와 게시글 작성자를 구분하기 위해 사용자 테이블을 각각 연결한다.
      */
     @Select("""
         SELECT
@@ -113,6 +116,8 @@ public interface AdminCommunityMapper {
     /**
      * 신고 대상 게시글을 숨긴다.
      * 이미 숨겨진 게시글이면 기존 숨김 처리자와 처리일을 유지한다.
+     * 게시글이 존재하면 이미 숨김 상태여도 UPDATE 대상에 포함된다.
+     * 같은 게시글에 접수된 다른 신고를 처리해도 기존 숨김 기록을 덮어쓰지 않는다.
      */
     @Update("""
         UPDATE dbo.COMMUNITY

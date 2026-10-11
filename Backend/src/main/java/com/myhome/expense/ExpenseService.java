@@ -8,7 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 지출 조회와 등록에 필요한 업무 처리를 담당한다.
+ * 로그인한 사용자의 생활비 조회·등록·수정·삭제를 담당한다.
+ * 고정 지출 납부로 생성된 생활비는 직접 수정·삭제하지 못하도록 제한한다.
  */
 @Service
 public class ExpenseService {
@@ -66,7 +67,11 @@ public class ExpenseService {
             );
         }
 
-        // 고정 지출 납부로 생성된 생활비는 직접 수정·삭제하지 못하게 한다.
+        /**
+         * 고정 지출 납부 기록에 연결된 생활비의 직접 수정·삭제를 차단한다.
+         * 연결 여부는 지출 유형이 아니라 실제 납부 기록으로 판단한다.
+         * 연결된 생활비를 제거하려면 고정 지출의 납부 취소 기능을 사용해야 한다.
+         */
         validateEditableExpense(userId, id);
 
         if (categoryMapper.countById(request.categoryId()) == 0) {

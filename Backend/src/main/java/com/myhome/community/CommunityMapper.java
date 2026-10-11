@@ -9,8 +9,8 @@ import java.util.List;
 public interface CommunityMapper {
 
     /**
-     * 검색 조건에 맞는 전체 게시글 수를 조회한다.
-     * 검색어가 없으면 전체 개수를 반환한다.
+     * 숨김 게시글을 제외하고 검색 조건에 맞는 게시글 수를 조회한다.
+     * 페이지 수가 목록과 일치하도록 findPage와 동일한 조건을 사용한다.
      */
     @Select("""
     <script>
@@ -81,8 +81,10 @@ public interface CommunityMapper {
 
 
     /**
-     * 게시글 ID로 상세 정보와 작성자 닉네임을 조회한다. 대상이 없으면 null을 반환한다.
-     * */
+     * 게시글 ID로 작성자 정보와 숨김 상태를 포함한 상세 정보를 조회한다.
+     * 숨김 게시글도 조회하며, 호출한 서비스에서 용도별 접근 제한을 적용한다.
+     * 대상이 없으면 null을 반환한다.
+     */
     @Select("""
             SELECT
                 c.ID AS id,
@@ -123,6 +125,7 @@ public interface CommunityMapper {
 
     /**
      * 게시글 ID와 작성자 ID가 일치하는 글의 제목·본문·수정 일시를 갱신한다.
+     * 숨김 상태의 게시글은 변경하지 않는다.
      * */
     @Update("""
             UPDATE dbo.COMMUNITY
@@ -141,6 +144,7 @@ public interface CommunityMapper {
 
     /**
      * 게시글 ID와 작성자 ID가 일치하는 글을 삭제하고 삭제된 행 수를 반환한다.
+     * 숨김 상태의 게시글은 변경하지 않는다.
      * */
     @Delete("""
             DELETE FROM dbo.COMMUNITY
@@ -154,8 +158,9 @@ public interface CommunityMapper {
     );
 
     /**
-     * 게시글 조회수를 1 증가시키고 변경된 행 수를 반환한다.
-     * */
+     * 공개된 게시글의 조회수를 1 증가시키고 변경된 행 수를 반환한다.
+     * 게시글이 없거나 숨김 상태이면 0을 반환한다.
+     */
     @Update("""
             UPDATE dbo.COMMUNITY
             SET VIEW_COUNT = VIEW_COUNT + 1
@@ -165,10 +170,10 @@ public interface CommunityMapper {
     int increaseViewCount(@Param("id") Long id);
 
 
-    /***
-     * 같은 사용자의 기존 신고가 있는지 확인
+    /**
+     * 해당 사용자가 대상 게시글을 신고한 이력이 있는지 확인한다.
+     * 처리 완료·기각된 신고도 중복 신고 판단에 포함한다.
      */
-
     @Select("""
         SELECT CASE
            WHEN EXISTS (
@@ -186,8 +191,10 @@ public interface CommunityMapper {
     );
 
     /**
-     * 신고 등록
-     * */
+     * 게시글에 대한 신고 사유와 상세 설명을 저장한다.
+     * 신고 상태와 접수 일시는 DB 기본값을 사용한다.
+     * 선택 입력인 상세 설명은 null일 수 있다.
+     */
     @Insert("""
             INSERT INTO dbo.COMMUNITY_REPORT (
                 COMMUNITY_ID,

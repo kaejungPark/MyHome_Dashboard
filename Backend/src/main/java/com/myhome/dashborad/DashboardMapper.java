@@ -46,7 +46,12 @@ public interface  DashboardMapper {
             @Param("today") LocalDate today,
             @Param("endDate") LocalDate endDate);
 
-
+    /**
+     * 지정한 월에 적용되는 활성 고정 지출 중 납부 기록이 없는 항목을 조회한다.
+     * 매월 납부일이 해당 월의 마지막 날을 넘으면 말일로 보정한다.
+     * 보정된 납부일이 오늘부터 7일 뒤까지인 항목만 반환한다.
+     * paymentMonth는 조회 대상 월의 1일이다.
+     */
     @Select("""
         SELECT
              r.ID,

@@ -33,10 +33,14 @@ public class DashboardService {
         this.recurringExpenseService = recurringExpenseService;
     }
 
+    /**
+     * 로그인한 사용자의 이번 달 지출·예산·고정 지출 현황을 모아 반환한다.
+     * 마감이 가까운 일정, 보증 종료 예정 물품과 납부 예정 항목을 함께 제공한다.
+     */
     @Transactional(readOnly = true)
     public DashboardResponse findDashboards(Long userId) {
 
-        // 조회를 위한 당일날짜 정의
+        // 한국 시간 기준 오늘 날짜를 조회 기준으로 사용한다.
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
 
         // 오늘부터 30일 뒤까지 마감되는 미완료 일정을 조회한다.
@@ -85,10 +89,10 @@ public class DashboardService {
      */
     @Transactional(readOnly = true)
     public List<UpcomingPaymentResponse> findPayment(Long userId) {
-        // 조회를 위한 당일날짜 정의
+        // 한국 시간 기준 오늘 날짜를 조회 기준으로 사용한다.
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
 
-        // 조회를 위한 당일날짜 + 7일 정의 => 만약 7일후가 다음달로 넘어갈 수 있기 때문
+        // 오늘부터 7일 뒤까지를 조회 범위로 정하고, 종료일이 속한 월도 확인한다.
         LocalDate sevenDaysLater = today.plusDays(7);
 
         // yyyy-MM 포맷터 생성

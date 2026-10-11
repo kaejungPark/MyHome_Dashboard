@@ -19,6 +19,8 @@ import com.myhome.auth.AuthUserDetailsService;
 
 /**
  * API 접근 규칙과 비밀번호 해시 처리 방식을 설정한다.
+ * 관리자 API는 ROLE_ADMIN 권한이 필요하다.
+ * 일반 로그인 조건보다 먼저 검사하며, 모든 HTTP 메서드에 적용한다.
  */
 @Configuration
 public class SecurityConfig  {

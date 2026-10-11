@@ -78,14 +78,15 @@ public class CommunityService {
     }
 
     /**
-     * 조회수를 1 증가시킨 뒤 게시글 상세 정보를 반환한다.
-     * 대상이 없으면 404를 반환하며, 처리 중 예외가 발생하면 조회수 증가도 롤백한다.
+     * 공개된 게시글의 조회수를 증가시킨 뒤 상세 정보를 반환한다.
+     * 게시글이 없거나 숨김 상태이면 404를 반환한다.
+     * 상세 조회 중 예외가 발생하면 조회수 증가도 함께 롤백한다.
      */
     @Transactional
     public CommunityDetailResponse getCommunity(Long id) {
         int updatedRows = communityMapper.increaseViewCount(id);
 
-        // 없는 게시글은 변경된 행이 없으므로 404를 반환한다.
+        // 게시글이 없거나 숨김 상태이면 조회수가 변경되지 않으므로 404를 반환한다.
         if (updatedRows == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
@@ -111,8 +112,8 @@ public class CommunityService {
     }
 
     /**
-     * 수정 폼에 표시할 본인 게시글 정보를 조회한다.
-     * 게시글이 없거나 작성자가 로그인 사용자와 다르면 404를 반환한다.
+     * 수정 화면에 필요한 본인 게시글 정보를 조회한다.
+     * 게시글이 없거나 숨김 상태이거나 다른 사용자의 글이면 404를 반환한다.
      * 수정 준비를 위한 조회이므로 조회수는 증가시키지 않는다.
      */
     @Transactional(readOnly = true)
@@ -153,8 +154,8 @@ public class CommunityService {
     }
 
     /**
-     * 로그인한 사용자가 작성한 게시글의 제목과 본문을 수정한다.
-     * 대상이 없거나 다른 사용자의 글이면 404를 반환한다.
+     * 로그인한 사용자가 작성한 공개 게시글의 제목과 본문을 수정한다.
+     * 게시글이 없거나 숨김 상태이거나 다른 사용자의 글이면 404를 반환한다.
      */
     @Transactional
     public void updateCommunity(Long userId, Long id, @Valid CommunitySaveRequest request) {
@@ -237,7 +238,7 @@ public class CommunityService {
             );
         }
 
-        // 게시글이 존재하고 숨김 상태가 아닌지 확인.
+        // 숨김 처리된 게시글은 추가 신고를 받지 않는다.
         if (community.isHidden()) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
@@ -245,7 +246,7 @@ public class CommunityService {
             );
         }
 
-        // 본인 글이면 신고 거절.
+        // 로그인한 사용자와 작성자가 같으면 신고를 거절한다.
         if (community.userId().equals(userId))  {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -253,7 +254,7 @@ public class CommunityService {
             );
         }
 
-        // 존재 여부만 boolean으로 확인
+        // 처리 상태와 관계없이 같은 사용자가 같은 게시글을 다시 신고하는 것을 차단한다.
         if (communityMapper.existsReport(userId, id)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,

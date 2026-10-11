@@ -22,9 +22,11 @@ public class BudgetService {
     @Transactional(readOnly = true)
     public BudgetResponse getBudget(Long userId, String monthText) {
         YearMonth month = MonthValidator.parseMonth(monthText);
-        BigDecimal budget = budgetMapper.findAmount(userId, month.atDay(1)); // BigDecimal 금액을 소수점 오차 없이 계산 하기 위해 사용, atDay 그 달의 첫째날을 가져오기 위해 사용
+        // 예산 월은 해당 월 1일로 조회하며, 미등록이면 null을 받는다.
+        BigDecimal budget = budgetMapper.findAmount(userId, month.atDay(1));
+        // 해당 월 1일 이상, 다음 달 1일 미만의 실제 지출을 합산한다.
         BigDecimal spent = budgetMapper.sumExpenses(userId, month.atDay(1), month.plusMonths(1).atDay(1));
-
+        // 예산 미등록과 0원 등록을 구분하고, 예산을 초과한 잔여 금액은 음수로 반환한다.
         return new BudgetResponse(month.toString(), budget != null, budget, spent, budget == null ? null : budget.subtract(spent));
 
 

@@ -105,7 +105,8 @@ public class RecurringExpenseService {
     }
 
     /**
-     * 고정 지출을 삭제한다.
+     * 로그인한 사용자의 고정 지출 설정을 삭제한다.
+     * 납부 기록이 있으면 이력 보존을 위해 삭제를 차단하고 비활성화를 안내한다.
      * 대상이 없거나 다른 사용자 소유이면 404를 반환한다.
      */
     @Transactional
@@ -140,9 +141,10 @@ public class RecurringExpenseService {
     }
 
     /**
-     * 선택한 월에 납부할 고정 지출 목록과 합계를 조회한다.
-     * 활성 상태이면서 시작·종료 월 범위에 포함되는 항목만 계산한다.
-     * 실제 지출(EXPENSE)을 생성하거나 변경하지 않는다.
+     * 선택한 월의 고정 지출 목록과 납부 상태, 예정 금액 합계를 반환한다.
+     * 미납 항목은 활성 상태이면서 적용 기간에 포함되는 경우에만 표시한다.
+     * 납부 기록이 있는 항목은 이후 비활성화되거나 적용 기간이 바뀌어도 표시한다.
+     * 이 조회에서는 생활비나 납부 기록을 생성하지 않는다.
      */
     @Transactional(readOnly = true)
     public MonthlyResponse getMonthlyExpenses(Long userId, String monthText) {
@@ -166,7 +168,7 @@ public class RecurringExpenseService {
                 recurringExpenseMapper.findeRecurringExpense(userId);
 
         List<MonthlyPaymentItem> items = expenses.stream()
-                // 비활성 항목은 납부 예정 금액에서 제외한다.
+                // 납부 이력이 있으면 유지하고, 미납 항목에만 활성 상태와 적용 기간 조건을 적용한다.
                 .filter(expense -> {
                     // 납부 후 비활성화하거나 적용 기간을 바꿔도 납부 이력은 보여준다.
                     if (payments.containsKey(expense.id())) {
@@ -218,8 +220,8 @@ public class RecurringExpenseService {
                 )
                 .toList();
 
-        // 소수점 오차를 피하기 위해 BigDecimal로 합산한다.
-        // 대상 항목이 없으면 합계는 0이다.
+        // 표시 대상의 현재 고정 지출 설정 금액을 합산한다.
+        // 미납 잔액이나 실제 납부한 생활비 합계가 아니며, 대상이 없으면 0을 반환한다.
         BigDecimal totalAmount = items.stream()
                 .map(MonthlyPaymentItem::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -273,7 +275,7 @@ public class RecurringExpenseService {
                 ? null
                 : MonthValidator.parseMonth(expense.endMonth());
 
-        // 시작·종료 월은 포함하며, 종료 월이 없으면 기간 제한을 두지 않는다.
+        // 시작·종료 월을 모두 포함한다. 종료 월이 없으면 시작 월 이후의 모든 월을 허용한다.
         if (targetMonth.isBefore(startMonth)
                 || (endMonth != null && targetMonth.isAfter(endMonth))) {
             throw new ResponseStatusException(
