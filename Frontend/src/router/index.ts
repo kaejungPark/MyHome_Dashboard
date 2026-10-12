@@ -47,6 +47,11 @@ const router = createRouter({
       component: () => import('../views/RecurringExpenseView.vue'), // 고정 지출
     },
     {
+      path: '/ingredients',
+      name: 'ingredients',
+      component: () => import('../views/IngredientView.vue'), // 식재료
+    },
+    {
       path: '/statistics',
       name: 'statistics',
       component: () => import('../views/StatisticsView.vue'), // 통계

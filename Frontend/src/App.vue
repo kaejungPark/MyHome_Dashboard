@@ -28,10 +28,11 @@ const loggingOut = ref(false)
 // MyHome 메뉴에서 이동할 생활 관리 화면 목록이다.
 const myHomeMenus = [
   { path: '/expenses', label: '생활비' },
-  { path: '/schedules', label: '일정' },
-  { path: '/items', label: '물품' },
   { path: '/budgets', label: '월별 예산' },
   { path: '/recurring-expenses', label: '고정 지출' },
+  { path: '/schedules', label: '일정' },
+  { path: '/ingredients', label: '식재료' },
+  { path: '/items', label: '물품' },
 ]
 
 // 현재 화면이 MyHome 메뉴에 속하면 상위 메뉴도 강조한다.

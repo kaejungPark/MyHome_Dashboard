@@ -101,11 +101,14 @@ public class DashboardService {
         // 오늘 날짜를 포맷에 맞게 문자열로 변환
         String currentMonth = today.format(formatter);
 
+        // 조회 종료일이 속한 월을 YYYY-MM 형식으로 변환한다.
+        String nextCurrentMonth = sevenDaysLater.format(formatter);
+
         // 조회 월을 검증하고 해당 월 1일로 변환한다.
         LocalDate paymentMonth = MonthValidator.parseMonth(currentMonth).atDay(1);
 
         // 조회 종료일인 7일 뒤가 속한 월의 1일을 구한다.
-        LocalDate paymentNextMonth = MonthValidator.parseMonth(currentMonth).atDay(1);
+        LocalDate paymentNextMonth = MonthValidator.parseMonth(nextCurrentMonth).atDay(1);
 
         // 1. 첫 번째 달 조회
         List<UpcomingPaymentResponse> paymentList = dashboardMapper.findPaymentByUserId(userId, today, paymentMonth);

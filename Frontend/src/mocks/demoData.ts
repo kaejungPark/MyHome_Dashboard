@@ -304,6 +304,97 @@ export function createDemoData(selectedMonth?: string) {
       .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.id - b.id),
   }
 
+  // 소비기한과 보관 상태별 화면 표시를 확인하기 위한 체험용 식재료다.
+  const ingredients = [
+    {
+      id: -501,
+      name: '우유',
+      quantity: 1,
+      unit: '팩',
+      storageLocation: 'REFRIGERATOR',
+      purchaseDate: addDays(today, -3),
+      expirationDate: addDays(today, 2),
+      status: 'STORED',
+      memo: '소비기한 임박 예시',
+    },
+    {
+      id: -502,
+      name: '두부',
+      quantity: 1,
+      unit: '모',
+      storageLocation: 'REFRIGERATOR',
+      purchaseDate: addDays(today, -4),
+      expirationDate: today,
+      status: 'STORED',
+      memo: '오늘까지인 식재료 예시',
+    },
+    {
+      id: -503,
+      name: '요거트',
+      quantity: 2,
+      unit: '개',
+      storageLocation: 'REFRIGERATOR',
+      purchaseDate: addDays(today, -10),
+      expirationDate: addDays(today, -1),
+      status: 'STORED',
+      memo: '소비기한 경과 예시',
+    },
+    {
+      id: -504,
+      name: '닭가슴살',
+      quantity: 1.5,
+      unit: 'kg',
+      storageLocation: 'FREEZER',
+      purchaseDate: addDays(today, -7),
+      expirationDate: addDays(today, 30),
+      status: 'STORED',
+      memo: '소분해서 냉동 보관',
+    },
+    {
+      id: -505,
+      name: '쌀',
+      quantity: 5,
+      unit: 'kg',
+      storageLocation: 'PANTRY',
+      purchaseDate: null,
+      expirationDate: null,
+      status: 'STORED',
+      memo: '선택 날짜 미입력 예시',
+    },
+    {
+      id: -506,
+      name: '바나나',
+      quantity: 1,
+      unit: '송이',
+      storageLocation: 'PANTRY',
+      purchaseDate: addDays(today, -5),
+      expirationDate: null,
+      status: 'CONSUMED',
+      memo: '소비 완료 예시',
+    },
+    {
+      id: -507,
+      name: '상추',
+      quantity: 1,
+      unit: '봉',
+      storageLocation: 'REFRIGERATOR',
+      purchaseDate: addDays(today, -12),
+      expirationDate: addDays(today, -3),
+      status: 'DISPOSED',
+      memo: '폐기 상태 예시',
+    },
+  ] satisfies {
+    id: number
+    name: string
+    quantity: number
+    unit: string
+    storageLocation: 'REFRIGERATOR' | 'FREEZER' | 'PANTRY'
+    purchaseDate: string | null
+    expirationDate: string | null
+    status: 'STORED' | 'CONSUMED' | 'DISPOSED'
+    memo: string | null
+  }[]
+
   return {
     categories,
     expenses,
@@ -314,6 +405,7 @@ export function createDemoData(selectedMonth?: string) {
     budget,
     statistics,
     dashboard,
+    ingredients,
   }
 }
 
