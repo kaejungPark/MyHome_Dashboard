@@ -15,7 +15,7 @@ public record IngredientSaveRequest (
 
         @NotBlank(message = "식재료명을 입력해주세요.")
         @Size(max = 100, message = "식재료명은 100자까지 입력할 수 있습니다.")
-                String name,
+        String name,
 
         @NotNull
         @DecimalMin(value = "0", inclusive = false)
