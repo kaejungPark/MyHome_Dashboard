@@ -53,6 +53,22 @@ function initialForm() {
 // 폼 입력값을 화면과 동기화한다.
 const form = reactive(initialForm())
 
+// 한국 기준 오늘의 연·월·일을 구하고, 날짜 비교용 UTC 자정 값으로 변환한다.
+const getToday = (): number => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const year = Number(parts.find((part) => part.type === 'year')!.value)
+  const month = Number(parts.find((part) => part.type === 'month')!.value)
+  const day = Number(parts.find((part) => part.type === 'day')!.value)
+
+  return Date.UTC(year, month - 1, day)
+}
+
 // 보관 장소 코드를 화면에 표시할 한글 명칭으로 변환한다.
 function storageLocationLabel(location: IngredientStorageLocation): string {
   switch (location) {
@@ -245,6 +261,38 @@ async function deleteIngredient(item: Ingredient) {
   }
 }
 
+// 소비기한과 한국 기준 오늘을 모두 UTC 자정 값으로 비교해 남은 일수를 계산한다.
+const calculateRemainingDays = (expiryDateString: string | null): number | null => {
+  if (!expiryDateString) return null
+
+  const expiry = new Date(`${expiryDateString}T00:00:00Z`).getTime()
+  if (!Number.isFinite(expiry)) return null
+
+  return Math.round((expiry - getToday()) / (1000 * 60 * 60 * 24))
+}
+
+// 남은 일수에 따라 문구와 스타일 클래스를 결정
+const getExpiryStatus = (status: IngredientStatus, expiryDateString: string | null) => {
+  // 보관 중(STORED)이 아니거나(소비 완료·폐기) 소비기한이 없는 경우
+  if (status !== 'STORED' || !expiryDateString) {
+    return { text: '', className: 'text-gray-400' }
+  }
+
+  const diffDays = calculateRemainingDays(expiryDateString)
+
+  if (diffDays === null) {
+    return { text: '', className: 'text-gray-400' }
+  } else if (diffDays < 0) {
+    return { text: '기한 경과', className: 'text-red-500 font-semibold' }
+  } else if (diffDays === 0) {
+    return { text: '오늘까지', className: 'text-red-500 font-semibold' }
+  } else if (diffDays >= 1 && diffDays <= 3) {
+    return { text: `${diffDays}일 남음 · 임박`, className: 'text-orange-500 font-semibold' }
+  } else {
+    return { text: `${diffDays}일 남음`, className: 'text-gray-600' }
+  }
+}
+
 // 화면이 처음 표시되면 식재료 목록을 조회한다.
 onMounted(loadData)
 </script>
@@ -430,7 +478,19 @@ onMounted(loadData)
 
               <td>{{ storageLocationLabel(item.storageLocation) }}</td>
               <td class="date-cell">{{ item.purchaseDate ?? '미입력' }}</td>
-              <td class="date-cell">{{ item.expirationDate ?? '미입력' }}</td>
+              <!-- 소비기한 셀 수정 -->
+              <td class="date-cell">
+                <div>{{ item.expirationDate ?? '미입력' }}</div>
+                <!-- 보관 중(STORED)일 때만 소비기한 아래에 남은 기간 표시 -->
+                <div
+                  v-if="item.status === 'STORED' && item.expirationDate"
+                  class="text-xs expiry-notice"
+                >
+                  <span :class="getExpiryStatus(item.status, item.expirationDate).className">
+                    {{ getExpiryStatus(item.status, item.expirationDate).text }}
+                  </span>
+                </div>
+              </td>
 
               <td>
                 <span
@@ -528,6 +588,33 @@ onMounted(loadData)
   color: #2563eb;
   font-size: 14px;
   line-height: 1.6;
+}
+
+/* 기존 스타일 외에 추가하거나 프로젝트에 맞게 정의할 수 있는 클래스입니다 */
+.text-xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.text-red-500 {
+  color: #ef4444;
+}
+.text-orange-500 {
+  color: #f97316;
+}
+.text-gray-400 {
+  color: #9ca3af;
+}
+.text-gray-600 {
+  color: #4b5563;
+}
+.font-semibold {
+  font-weight: 600;
+}
+
+/* 소비기한 날짜와 남은 기간 안내 사이에 간격을 둔다. */
+.expiry-notice {
+  margin-top: 2px;
 }
 
 @media (max-width: 560px) {
