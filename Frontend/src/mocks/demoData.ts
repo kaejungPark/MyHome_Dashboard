@@ -395,6 +395,86 @@ export function createDemoData(selectedMonth?: string) {
     memo: string | null
   }[]
 
+  // 집안일·소모품의 주기와 다음 예정일을 보여주는 체험 데이터다.
+  const householdTasks = [
+    {
+      id: -601,
+      name: '욕실 청소',
+      taskType: 'CHORE',
+      cycleDays: 7,
+      nextDueDate: addDays(today, -1),
+      active: true,
+      memo: '바닥과 배수구 청소',
+    },
+    {
+      id: -602,
+      name: '침구 세탁',
+      taskType: 'CHORE',
+      cycleDays: 14,
+      nextDueDate: today,
+      active: true,
+      memo: '베개 커버와 이불 세탁',
+    },
+    {
+      id: -603,
+      name: '주방 수세미 교체',
+      taskType: 'CONSUMABLE',
+      cycleDays: 30,
+      nextDueDate: addDays(today, 3),
+      active: true,
+      memo: '사용한 수세미를 새것으로 교체',
+    },
+    {
+      id: -604,
+      name: '에어컨 필터 청소',
+      taskType: 'CHORE',
+      cycleDays: 30,
+      nextDueDate: addDays(today, 10),
+      active: false,
+      memo: '사용하지 않는 계절에는 비활성화',
+    },
+  ] satisfies {
+    id: number
+    name: string
+    taskType: 'CHORE' | 'CONSUMABLE'
+    cycleDays: number
+    nextDueDate: string
+    active: boolean
+    memo: string | null
+  }[]
+
+  // taskId로 관리 항목과 연결하며, 최근 완료일 순으로 표시한다.
+  const householdTaskHistories = [
+    {
+      id: -701,
+      taskId: -601,
+      completedDate: addDays(today, -8),
+      memo: '배수구 청소까지 완료',
+      createdDt: `${addDays(today, -8)}T03:00:00`,
+    },
+    {
+      id: -702,
+      taskId: -602,
+      completedDate: addDays(today, -14),
+      memo: '이불과 베개 커버 세탁 완료',
+      createdDt: `${addDays(today, -14)}T03:00:00`,
+    },
+    {
+      id: -703,
+      taskId: -601,
+      completedDate: addDays(today, -15),
+      memo: null,
+      createdDt: `${addDays(today, -15)}T03:00:00`,
+    },
+    {
+      id: -704,
+      taskId: -603,
+      completedDate: addDays(today, -27),
+      memo: '새 수세미로 교체 완료',
+      createdDt: `${addDays(today, -27)}T03:00:00`,
+    },
+  ]
+
   return {
     categories,
     expenses,
@@ -406,6 +486,8 @@ export function createDemoData(selectedMonth?: string) {
     statistics,
     dashboard,
     ingredients,
+    householdTasks,
+    householdTaskHistories,
   }
 }
 

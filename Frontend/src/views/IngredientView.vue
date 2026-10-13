@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Carrot, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 물품 관리 화면의 제목과 주요 동작에 사용할 아이콘
+import { Carrot, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 식재료 보관 장소 상태값
@@ -103,7 +103,7 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
-// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 물품 목록을 표시한다.
+// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 목록을 표시한다.
 async function loadData() {
   if (loading.value) return
 

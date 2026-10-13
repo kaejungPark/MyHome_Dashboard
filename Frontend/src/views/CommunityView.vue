@@ -154,6 +154,17 @@ onMounted(loadData)
               <option value="NICKNAME">닉네임</option>
             </select>
           </label>
+          <label>
+            <span class="sr-only">검색어</span>
+            <input
+              v-model="keyword"
+              type="search"
+              :placeholder="
+                searchType === 'TITLE' ? '제목을 입력해 주세요' : '닉네임을 입력해 주세요'
+              "
+              :disabled="loading"
+            />
+          </label>
         </div>
 
         <div class="search-action">
@@ -343,6 +354,13 @@ onMounted(loadData)
 
 .write-link {
   text-decoration: none;
+}
+
+/* 검색 기준과 검색어 입력창을 검색 버튼 왼쪽에 나란히 배치한다. */
+.community-page .search-fields {
+  flex: 0 1 450px;
+  min-width: 0;
+  grid-template-columns: 130px minmax(0, 1fr);
 }
 
 /* 모바일에서는 검색창과 버튼을 세로로 배치한다. */

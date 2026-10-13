@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Coins, Target, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue' // 월별 예산 화면의 제목과 주요 동작에 사용할 아이콘
+import { Coins, Target, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 월별 예산 조회 결과다.

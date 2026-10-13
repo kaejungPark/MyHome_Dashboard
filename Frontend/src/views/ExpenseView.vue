@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Wallet, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 생활비 화면의 제목과 주요 동작에 사용할 아이콘
+import { Wallet, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 카테고리 선택 목록에서 사용하는 데이터다.

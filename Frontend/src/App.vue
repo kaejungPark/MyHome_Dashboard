@@ -31,6 +31,7 @@ const myHomeMenus = [
   { path: '/budgets', label: '월별 예산' },
   { path: '/recurring-expenses', label: '고정 지출' },
   { path: '/schedules', label: '일정' },
+  { path: '/household-tasks', label: '집안일·소모품' },
   { path: '/ingredients', label: '식재료' },
   { path: '/items', label: '물품' },
 ]

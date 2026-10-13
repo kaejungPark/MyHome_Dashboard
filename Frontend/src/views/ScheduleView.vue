@@ -2,7 +2,7 @@
 import { onMounted, ref, reactive } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { CalendarDays, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 일정 관리 화면의 제목과 주요 동작에 사용할 아이콘
+import { CalendarDays, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 일정 목록 조회와 수정 폼에서 사용하는 데이터다.

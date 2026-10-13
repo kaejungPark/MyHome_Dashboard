@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Package, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 물품 관리 화면의 제목과 주요 동작에 사용할 아이콘
+import { Package, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 관리 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
 
 // 물품 상태에 사용할 수 있는 값이다.

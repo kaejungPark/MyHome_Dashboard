@@ -27,16 +27,6 @@ const router = createRouter({
       component: () => import('../views/ExpenseView.vue'), // 생활비
     },
     {
-      path: '/schedules',
-      name: 'schedules',
-      component: () => import('../views/ScheduleView.vue'), // 일정
-    },
-    {
-      path: '/items',
-      name: 'items',
-      component: () => import('../views/HomeItemView.vue'), // 물품
-    },
-    {
       path: '/budgets',
       name: 'budgets',
       component: () => import('../views/BudgetView.vue'), // 월별 예산
@@ -47,9 +37,24 @@ const router = createRouter({
       component: () => import('../views/RecurringExpenseView.vue'), // 고정 지출
     },
     {
+      path: '/schedules',
+      name: 'schedules',
+      component: () => import('../views/ScheduleView.vue'), // 일정
+    },
+    {
+      path: '/household-tasks',
+      name: 'household-tasks',
+      component: () => import('../views/HouseholdTaskView.vue'), // 집안일·소모품
+    },
+    {
       path: '/ingredients',
       name: 'ingredients',
       component: () => import('../views/IngredientView.vue'), // 식재료
+    },
+    {
+      path: '/items',
+      name: 'items',
+      component: () => import('../views/HomeItemView.vue'), // 물품
     },
     {
       path: '/statistics',
