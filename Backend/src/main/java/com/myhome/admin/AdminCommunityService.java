@@ -1,11 +1,12 @@
 package com.myhome.admin;
 
 import com.myhome.common.response.PageResponse;
+import com.myhome.common.util.PageUtils;
+import com.myhome.common.validation.PageValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
 import java.util.List;
 
 @Service
@@ -24,12 +25,7 @@ public class AdminCommunityService {
     @Transactional(readOnly = true)
     public PageResponse<AdminReportListResponse> getReports(int page, int size, String status) {
         // 페이지와 페이지 크기를 검증한다.
-        if (page < 1 || size < 1 || size > 50) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "페이지는 1 이상, 페이지 크기는 1~50이어야 합니다."
-            );
-        }
+        PageValidator.validate(page, size);
 
         // 상태값의 앞뒤 공백을 제거하고, 서비스에 null이나 빈 값이 전달되면 전체 조회로 처리한다.
         String statusType = status == null || status.isBlank() ? "ALL" : status.trim();
@@ -46,14 +42,13 @@ public class AdminCommunityService {
         }
 
         // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
-        long offset = (long) (page - 1) * size;
+        long offset = PageUtils.calculateOffset(page, size);
 
         // 목록과 동일한 검색 조건으로 전체 신고 수를 조회한다.
         long totalCount = adminCommunityMapper.countAll(statusType);
 
         // 나머지가 있으면 마지막 페이지를 하나 추가한다.
-        long totalPages = totalCount / size
-                + (totalCount % size == 0 ? 0 : 1);
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
 
         // 검색 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
         List<AdminReportListResponse> items = offset >= totalCount

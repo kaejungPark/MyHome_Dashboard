@@ -7,24 +7,71 @@ import java.util.List;
 
 @Mapper
 public interface HouseholdTaskMapper {
+
     /**
-     * 현재 사용자의 관리 항목을 활성·비활성 상태 모두 포함해 조회한다.
-     * 활성 항목을 먼저 표시하고, 예정일 오름차순과 ID 내림차순으로 정렬한다.
+     * 로그인한 사용자의 집안일·소모품 중 항목명 ·유형  사용 상태 조건에 맞는 전체 개수를 조회한다.
+     * 검색어와 필터가 비어 있으면 해당 조건을 적용하지 않는다.
      */
     @Select("""
-        SELECT
-            t.ID AS id,
-            t.NAME AS name,
-            t.TASK_TYPE AS taskType,
+            <script>
+            SELECT COUNT_BIG(*)
+            FROM dbo.HOUSEHOLD_TASK t
+            WHERE t.USER_ID = #{userId}
+             <if test="searchName != null and searchName != ''">
+                AND t.NAME LIKE CONCAT('%', #{searchName}, '%')
+             </if>
+             <if test="searchType != null and searchType != ''">
+                AND t.TASK_TYPE = #{searchType}
+             </if>
+             <if test="active != null">
+                 AND t.IS_ACTIVE = #{active}
+             </if>
+            </script>
+    """)
+    long countAll(
+            @Param("userId") Long userId,
+            @Param("searchName") String searchName,
+            @Param("searchType") String searchType,
+            @Param("active") Boolean active
+    );
+
+    /**
+     * 현재 사용자의 집안일·소모품을 등록일과 ID 기준 최신순으로 조회한다.
+     */
+    @Select("""
+            <script>
+            SELECT
+                t.ID AS id,
+                t.NAME AS name,
+                t.TASK_TYPE AS taskType,
                 t.CYCLE_DAYS AS cycleDays,
-            t.NEXT_DUE_DATE AS nextDueDate,
-            t.IS_ACTIVE AS active,
-            t.MEMO AS memo
-        FROM dbo.HOUSEHOLD_TASK t
-        WHERE t.USER_ID = #{userId}
-        ORDER BY t.IS_ACTIVE DESC, t.NEXT_DUE_DATE ASC, t.ID DESC
-        """)
-    List<HouseholdTaskResponse> findTasks(@Param("userId") Long userId);
+                t.NEXT_DUE_DATE AS nextDueDate,
+                t.IS_ACTIVE AS active,
+                t.MEMO AS memo
+            FROM dbo.HOUSEHOLD_TASK t
+            WHERE t.USER_ID = #{userId}
+             <if test="searchName != null and searchName != ''">
+                AND t.NAME LIKE CONCAT('%', #{searchName}, '%')
+             </if>
+             <if test="searchType != null and searchType != ''">
+                AND t.TASK_TYPE = #{searchType}
+             </if>
+             <if test="active != null">
+                 AND t.IS_ACTIVE = #{active}
+             </if>
+            ORDER BY t.IS_ACTIVE DESC, t.NEXT_DUE_DATE ASC, t.ID DESC
+            OFFSET #{offset} ROWS
+            FETCH NEXT #{size} ROWS ONLY
+            </script>
+    """)
+    List<HouseholdTaskResponse> findPage(
+            @Param("userId") Long userId,
+            @Param("searchName") String searchName,
+            @Param("searchType") String searchType,
+            @Param("active") Boolean active,
+            @Param("offset") long offset,
+            @Param("size") int size
+    );
 
     /**
      * 관리 항목을 등록하고 저장된 행 수를 반환한다.
@@ -198,10 +245,13 @@ public interface HouseholdTaskMapper {
             @Param("userId") Long userId
     );
 
-    /**
-     * 관리 항목의 완료 이력을 완료일과 ID 내림차순으로 조회한다.
-     * 소유 여부는 서비스에서 먼저 확인하며, 이력이 없으면 빈 목록을 반환한다.
-     */
+    @Select("""
+        SELECT COUNT_BIG(*)
+        FROM dbo.HOUSEHOLD_TASK_HISTORY
+        WHERE TASK_ID = #{id}
+    """)
+    long countAllHistrory(@Param("id") Long id);
+
     @Select("""
         SELECT
             ID AS id,
@@ -212,6 +262,12 @@ public interface HouseholdTaskMapper {
         FROM dbo.HOUSEHOLD_TASK_HISTORY
         WHERE TASK_ID = #{id}
         ORDER BY COMPLETED_DATE DESC, ID DESC
-        """)
-    List<HouseholdTaskHistoryResponse> findHistories(@Param("id") Long id);
+        OFFSET #{offset} ROWS
+        FETCH NEXT #{size} ROWS ONLY
+    """)
+    List<HouseholdTaskHistoryResponse> findPageHistrory(
+            @Param("id") Long id,
+            @Param("offset") long offset,
+            @Param("size") int size
+    );
 }

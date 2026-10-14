@@ -1,11 +1,9 @@
 package com.myhome.dashborad;
 
 import com.myhome.common.validation.MonthValidator;
-import com.myhome.recurringexpense.MonthlyResponse;
 import com.myhome.recurringexpense.RecurringExpenseService;
 import com.myhome.statistics.StatisticsResponse;
 import com.myhome.statistics.StatisticsService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,7 +54,7 @@ public class DashboardService {
         BigDecimal totalAmount = statistics.totalAmount();
 
         // 고정 지출 월별 예정 조회
-        MonthlyResponse monthly = recurringExpenseService.getMonthlyExpenses(userId, month);
+        BigDecimal recurringAmount = recurringExpenseService.getMonthlyTotalAmount(userId, month);
 
         // 오늘 기준 30일 뒤까지 마감되는 미완료 일정을 최대 5개 조회한다.
         List<DashboardScheduleResponse> schedules = dashboardMapper.findSchedules(userId, today, endDate);
@@ -75,7 +73,7 @@ public class DashboardService {
                 statistics.budgetAmount(),    // 월 예산
                 statistics.remainingAmount(), // 잔여 예산
                 statistics.usageRate(),       // 예산 사용률
-                monthly.totalAmount(),        // 고정 지출 예정 합계
+                recurringAmount,        // 고정 지출 예정 합계
                 schedules,                    // 마감이 가까운 일정 목록
                 items,                         // 보증 종료 예정 물품 목록
                 payment
@@ -122,4 +120,6 @@ public class DashboardService {
         return paymentList;
 
     }
+
+
 }

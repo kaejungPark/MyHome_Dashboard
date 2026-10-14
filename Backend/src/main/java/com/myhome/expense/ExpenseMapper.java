@@ -12,8 +12,21 @@ import org.apache.ibatis.annotations.Delete;
 public interface ExpenseMapper {
 
     /**
-     * 사용자별 지출을 날짜가 최신인 순서로 조회한다.
-     * 같은 날짜라면 ID가 큰 항목을 먼저 표시한다.
+     * 로그인한 사용자의 전체 지출 개수를 조회한다.
+     * 페이지 수가 목록과 일치하도록 findPage와 동일한 조회 조건을 사용한다.
+     */
+    @Select("""
+        SELECT COUNT_BIG(*)
+        FROM dbo.EXPENSE e
+        INNER JOIN dbo.EXPENSE_CATEGORY c
+            ON c.ID = e.CATEGORY_ID
+        WHERE e.USER_ID = #{userId}
+    """)
+    long countAll(@Param("userId") Long userId);
+
+    /**
+     * 로그인한 사용자의 지출을 페이지 단위로 조회한다.
+     * 지출일 내림차순으로 정렬하고, 같은 날짜라면 ID가 큰 항목을 먼저 표시한다.
      */
     @Select("""
         SELECT
@@ -31,8 +44,14 @@ public interface ExpenseMapper {
             ON c.ID = e.CATEGORY_ID
         WHERE e.USER_ID = #{userId}
         ORDER BY e.EXPENSE_DATE DESC, e.ID DESC
-        """)
-    List<ExpenseResponse> findAllByUserId(@Param("userId") Long userId);
+        OFFSET #{offset} ROWS
+        FETCH NEXT #{size} ROWS ONLY
+    """)
+    List<ExpenseResponse> findPage(
+            @Param("userId") Long userId,
+            @Param("offset") long offset,
+            @Param("size") int size
+    );
 
     /**
      * 등록 요청의 카테고리가 실제로 존재하는지 확인한다.
@@ -117,4 +136,6 @@ public interface ExpenseMapper {
             @Param("userId") Long userId,
             @Param("expenseId") Long expenseId
     );
+
+
 }

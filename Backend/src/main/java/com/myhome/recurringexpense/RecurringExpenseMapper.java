@@ -1,22 +1,30 @@
 package com.myhome.recurringexpense;
 
-import jakarta.validation.Valid;
 import org.apache.ibatis.annotations.*;
-
 import java.time.LocalDate;
 import java.util.List;
+import java.math.BigDecimal;
 
 @Mapper
 public interface RecurringExpenseMapper {
 
     /**
-     * 현재 사용자의 고정 지출 목록을 조회한다.
-     * 카테고리 테이블과 조인하여 카테고리명을 함께 반환한다.
-     * 시작·종료 월은 응답 형식에 맞춰 YYYY-MM 문자열로 변환한다.
-     * 비활성 항목도 포함하며, 납부일과 ID 순서로 정렬한다.
-     * SELECT 컬럼 순서는 RecurringExpenseResponse의 생성자 인자 순서에 맞춘다.
+     * 로그인한 사용자의 전체 고정 지출 개수를 조회한다.
+     * 페이지 수가 목록과 일치하도록 findPage와 동일한 조회 조건을 사용한다.
      */
+    @Select("""
+        SELECT COUNT_BIG(*)
+        FROM dbo.RECURRING_EXPENSE r
+        JOIN dbo.EXPENSE_CATEGORY c
+            ON c.ID = r.CATEGORY_ID
+        WHERE r.USER_ID = #{userId}
+    """)
+    long countAll(@Param("userId") Long userId);
 
+    /**
+     * 로그인한 사용자의 고정 지출을 페이지 단위로 조회한다.
+     * 지출일 내림차순으로 정렬하고, 같은 날짜라면 ID가 큰 항목을 먼저 표시한다.
+     */
     @Select("""
         SELECT
             r.ID AS id,
@@ -34,8 +42,138 @@ public interface RecurringExpenseMapper {
         JOIN dbo.EXPENSE_CATEGORY c ON c.ID = r.CATEGORY_ID
         WHERE r.USER_ID = #{userId}
         ORDER BY r.PAYMENT_DAY, r.ID
-        """)
-    List<RecurringExpenseResponse> findeRecurringExpense(@Param("userId") Long userId);
+        OFFSET #{offset} ROWS
+        FETCH NEXT #{size} ROWS ONLY
+    """)
+    List<RecurringExpenseResponse> findPage(
+            @Param("userId") Long userId,
+            @Param("offset") long offset,
+            @Param("size") int size
+    );
+
+    /**
+     * 조회 월의 납부 대상 개수를 조회한다.
+     * 납부 기록이 있으면 현재 활성 상태와 적용 기간에 관계없이 포함한다.
+     */
+    @Select("""
+        SELECT COUNT_BIG(*)
+        FROM dbo.RECURRING_EXPENSE r
+        JOIN dbo.EXPENSE_CATEGORY c
+          ON c.ID = r.CATEGORY_ID
+        LEFT JOIN dbo.RECURRING_PAYMENT p
+          ON p.RECURRING_EXPENSE_ID = r.ID
+         AND p.USER_ID = r.USER_ID
+         AND p.PAYMENT_MONTH = #{monthStart}
+        WHERE r.USER_ID = #{userId}
+          AND (
+              p.ID IS NOT NULL
+              OR (
+                  r.IS_ACTIVE = 1
+                  AND r.START_MONTH <= #{monthStart}
+                  AND (
+                      r.END_MONTH IS NULL
+                      OR r.END_MONTH >= #{monthStart}
+                  )
+              )
+          )
+    """)
+    long countMonthly(
+            @Param("userId") Long userId,
+            @Param("monthStart") LocalDate monthStart
+    );
+
+    /**
+     * 조회 월의 전체 대상에 설정된 고정 지출 금액을 합산한다.
+     * 납부 완료 항목도 포함하며, 미납 잔액이나 실제 납부 금액 합계는 아니다.
+     * 대상이 없으면 0을 반환한다.
+     */
+    @Select("""
+        SELECT COALESCE(SUM(r.AMOUNT), 0)
+        FROM dbo.RECURRING_EXPENSE r
+        JOIN dbo.EXPENSE_CATEGORY c
+          ON c.ID = r.CATEGORY_ID
+        LEFT JOIN dbo.RECURRING_PAYMENT p
+          ON p.RECURRING_EXPENSE_ID = r.ID
+         AND p.USER_ID = r.USER_ID
+         AND p.PAYMENT_MONTH = #{monthStart}
+        WHERE r.USER_ID = #{userId}
+          AND (
+              p.ID IS NOT NULL
+              OR (
+                  r.IS_ACTIVE = 1
+                  AND r.START_MONTH <= #{monthStart}
+                  AND (
+                      r.END_MONTH IS NULL
+                      OR r.END_MONTH >= #{monthStart}
+                  )
+              )
+          )
+    """)
+    BigDecimal sumMonthlyAmount(
+            @Param("userId") Long userId,
+            @Param("monthStart") LocalDate monthStart
+    );
+
+    /**
+     * 조회 월의 납부 대상과 납부 상태를 페이지 단위로 조회한다.
+     * 납부 예정일은 해당 월의 말일을 넘지 않도록 보정한다.
+     * 보정한 납부 예정일과 고정 지출 ID 순으로 정렬한 뒤 페이징한다.
+     */
+    @Select("""
+        SELECT
+            r.ID AS id,
+            r.CATEGORY_ID AS categoryId,
+            c.NAME AS categoryName,
+            r.TITLE AS title,
+            r.AMOUNT AS amount,
+            DATEADD(
+                DAY,
+                CASE
+                    WHEN r.PAYMENT_DAY > DAY(EOMONTH(CAST(#{monthStart} AS DATE)))
+                        THEN DAY(EOMONTH(CAST(#{monthStart} AS DATE)))
+                    ELSE r.PAYMENT_DAY
+                END - 1,
+                CAST(#{monthStart} AS DATE)
+            ) AS paymentDate,
+            r.PAYMENT_METHOD AS paymentMethod,
+            CAST(
+                CASE WHEN p.ID IS NOT NULL THEN 1 ELSE 0 END
+                AS BIT
+            ) AS paid,
+            p.EXPENSE_ID AS expenseId,
+            e.EXPENSE_DATE AS paidDate
+        FROM dbo.RECURRING_EXPENSE r
+        JOIN dbo.EXPENSE_CATEGORY c
+          ON c.ID = r.CATEGORY_ID
+        LEFT JOIN dbo.RECURRING_PAYMENT p
+          ON p.RECURRING_EXPENSE_ID = r.ID
+         AND p.USER_ID = r.USER_ID
+         AND p.PAYMENT_MONTH = #{monthStart}
+        LEFT JOIN dbo.EXPENSE e
+          ON e.ID = p.EXPENSE_ID
+         AND e.USER_ID = p.USER_ID
+        WHERE r.USER_ID = #{userId}
+          AND (
+              p.ID IS NOT NULL
+              OR (
+                  r.IS_ACTIVE = 1
+                  AND r.START_MONTH <= #{monthStart}
+                  AND (
+                      r.END_MONTH IS NULL
+                      OR r.END_MONTH >= #{monthStart}
+                  )
+              )
+          )
+        ORDER BY paymentDate ASC, r.ID ASC
+        OFFSET #{offset} ROWS
+        FETCH NEXT #{size} ROWS ONLY
+    """)
+    List<MonthlyPaymentItem> findMonthlyPage(
+            @Param("userId") Long userId,
+            @Param("monthStart") LocalDate monthStart,
+            @Param("offset") long offset,
+            @Param("size") int size
+    );
 
     /**
      * 현재 사용자의 고정 지출을 등록하고 저장된 행 수를 반환한다.
@@ -296,4 +434,7 @@ public interface RecurringExpenseMapper {
             @Param("userId") Long userId,
             @Param("id") Long id
     );
+
+
+
 }

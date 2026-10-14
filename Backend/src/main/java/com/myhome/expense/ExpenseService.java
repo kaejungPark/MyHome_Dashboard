@@ -2,10 +2,14 @@ package com.myhome.expense;
 
 import com.myhome.category.CategoryMapper;
 import java.util.List;
+
+import com.myhome.common.response.PageResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.myhome.common.validation.PageValidator;
+import com.myhome.common.util.PageUtils;
 
 /**
  * 로그인한 사용자의 생활비 조회·등록·수정·삭제를 담당한다.
@@ -30,9 +34,35 @@ public class ExpenseService {
      * 로그인한 사용자의 지출만 조회한다.
      */
     @Transactional(readOnly = true)
-    public List<ExpenseResponse> getExpenses(Long userId) {
+    public PageResponse<ExpenseResponse> getExpenses(
+            Long userId,
+            int page,
+            int size
+    ) {
+        // 페이지 번호와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
 
-        return expenseMapper.findAllByUserId(userId);
+        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 목록과 동일한 조건으로 전체 지출 수를 조회한다.
+        long totalCount = expenseMapper.countAll(userId);
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        // 조회 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
+        List<ExpenseResponse> items = offset >= totalCount
+                ? List.of()
+                : expenseMapper.findPage(userId, offset, size);
+
+        return new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
     }
 
     /**

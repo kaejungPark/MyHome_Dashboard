@@ -1,9 +1,8 @@
 package com.myhome.recurringexpense;
 
-import java.util.List;
-
 import com.myhome.auth.LoginUser;
 import com.myhome.common.response.ApiResponse;
+import com.myhome.common.response.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +20,12 @@ public class RecurringExpenseController {
      * GET /api/recurring-expenses: 현재 사용자의 고정 지출 관리 목록을 조회한다.
      * */
     @GetMapping
-    public ApiResponse<List<RecurringExpenseResponse>> getRecurringExpense(@AuthenticationPrincipal LoginUser loginUser) {
-        return ApiResponse.success(recurringExpenseService.getRecurringExpense(loginUser.getId()));
+    public ApiResponse<PageResponse<RecurringExpenseResponse>> getRecurringExpense(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.success(recurringExpenseService.getRecurringExpense(loginUser.getId(), page, size));
     }
 
     /**
@@ -33,10 +36,12 @@ public class RecurringExpenseController {
     @GetMapping("/monthly/{month}")
     public ApiResponse<MonthlyResponse> getMonthlyExpenses(
             @AuthenticationPrincipal LoginUser loginUser,
-            @PathVariable("month") String month
+            @PathVariable("month") String month,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
     ) {
         return ApiResponse.success(
-                recurringExpenseService.getMonthlyExpenses(loginUser.getId(), month)
+                recurringExpenseService.getMonthlyExpenses(loginUser.getId(), month, page, size)
         );
     }
 

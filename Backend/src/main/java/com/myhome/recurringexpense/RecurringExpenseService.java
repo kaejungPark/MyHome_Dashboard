@@ -1,5 +1,6 @@
 package com.myhome.recurringexpense;
 
+import com.myhome.common.response.PageResponse;
 import com.myhome.common.validation.DateValidator;
 import com.myhome.common.validation.MonthValidator;
 import jakarta.validation.Valid;
@@ -10,12 +11,10 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.Comparator;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import com.myhome.common.validation.PageValidator;
+import com.myhome.common.util.PageUtils;
 
 @Service
 public class RecurringExpenseService {
@@ -34,8 +33,99 @@ public class RecurringExpenseService {
      * 월별 적용 기간 필터링은 납부 예정 조회에서 별도로 수행한다.
      */
     @Transactional(readOnly = true)
-    public List<RecurringExpenseResponse> getRecurringExpense(Long userId) {
-        return recurringExpenseMapper.findeRecurringExpense(userId);
+    public PageResponse<RecurringExpenseResponse> getRecurringExpense(
+            Long userId,
+            int page,
+            int size
+    ) {
+
+        // 페이지와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
+
+        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 목록과 동일한 조건으로 전체 지출 수를 조회한다.
+        long totalCount = recurringExpenseMapper.countAll(userId);
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        // 조회 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
+        List<RecurringExpenseResponse> items = offset >= totalCount
+                ? List.of()
+                : recurringExpenseMapper.findPage(userId, offset, size);
+
+        return new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
+    }
+
+    /**
+     * 선택한 월의 고정 지출을 페이지 단위로 조회한다.
+     * 전체 개수와 예정 금액 합계는 현재 페이지가 아닌 월별 전체 대상을 기준으로 계산한다.
+     * 납부 기록이 있는 항목은 비활성화되거나 적용 기간이 변경되어도 포함한다.
+     */
+    @Transactional(readOnly = true)
+    public MonthlyResponse getMonthlyExpenses(
+            Long userId,
+            String monthText,
+            int page,
+            int size
+    ) {
+
+        // 페이지 번호와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
+
+        // 기존 월 검증 함수를 사용해 조회 월을 검증한다.
+        LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
+        YearMonth targetMonth = YearMonth.from(monthStart);
+
+        // 곱하기 전에 long으로 변환해 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 월별 조회 조건에 맞는 전체 개수와 전체 금액을 조회한다.
+        long totalCount =
+                recurringExpenseMapper.countMonthly(userId, monthStart);
+
+        BigDecimal totalAmount =
+                recurringExpenseMapper.sumMonthlyAmount(userId, monthStart);
+
+        // 대상이 없으면 예정 금액 합계는 0으로 표시한다.
+        if (totalAmount == null) {
+            totalAmount = BigDecimal.ZERO;
+        }
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        // 월별 조건과 납부 예정일 정렬을 적용한 뒤 현재 페이지를 조회한다.
+        List<MonthlyPaymentItem> items = offset >= totalCount
+                ? List.of()
+                : recurringExpenseMapper.findMonthlyPage(
+                userId,
+                monthStart,
+                offset,
+                size
+        );
+
+        PageResponse<MonthlyPaymentItem> pageResponse = new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
+
+        return new MonthlyResponse(
+                targetMonth.toString(),
+                totalAmount,
+                pageResponse
+        );
     }
 
     /**
@@ -138,99 +228,6 @@ public class RecurringExpenseService {
             throw new IllegalStateException("고정 지출 삭제 중 오류가 발생하였습니다.");
         }
 
-    }
-
-    /**
-     * 선택한 월의 고정 지출 목록과 납부 상태, 예정 금액 합계를 반환한다.
-     * 미납 항목은 활성 상태이면서 적용 기간에 포함되는 경우에만 표시한다.
-     * 납부 기록이 있는 항목은 이후 비활성화되거나 적용 기간이 바뀌어도 표시한다.
-     * 이 조회에서는 생활비나 납부 기록을 생성하지 않는다.
-     */
-    @Transactional(readOnly = true)
-    public MonthlyResponse getMonthlyExpenses(Long userId, String monthText) {
-
-        // 기존 월 검증 함수를 사용해 조회 월을 검증한다.
-        LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
-        YearMonth targetMonth = YearMonth.from(monthStart);
-
-        // 고정 지출 ID로 납부 기록을 바로 찾을 수 있도록 Map으로 변환한다.
-        Map<Long, RecurringPaymentResponse> payments =
-                recurringExpenseMapper.findPaymentsByMonth(userId, monthStart)
-                        .stream()
-                        .collect(Collectors.toMap(
-                                RecurringPaymentResponse::recurringExpenseId,
-                                Function.identity()
-                        ));
-
-        // 현재 사용자의 고정 지출 목록을 조회한다.
-        // 기존 Mapper 메서드 이름에 맞춰 호출한다.
-        List<RecurringExpenseResponse> expenses =
-                recurringExpenseMapper.findeRecurringExpense(userId);
-
-        List<MonthlyPaymentItem> items = expenses.stream()
-                // 납부 이력이 있으면 유지하고, 미납 항목에만 활성 상태와 적용 기간 조건을 적용한다.
-                .filter(expense -> {
-                    // 납부 후 비활성화하거나 적용 기간을 바꿔도 납부 이력은 보여준다.
-                    if (payments.containsKey(expense.id())) {
-                        return true;
-                    }
-
-                    YearMonth startMonth = YearMonth.parse(expense.startMonth());
-                    YearMonth endMonth = expense.endMonth() == null
-                            ? null
-                            : YearMonth.parse(expense.endMonth());
-
-                    return expense.active()
-                            && !targetMonth.isBefore(startMonth)
-                            && (endMonth == null || !targetMonth.isAfter(endMonth));
-                })
-
-                // 매월 납부일을 선택한 월의 실제 날짜로 변환한다.
-                .map(expense -> {
-                    // 예: 9월 31일 → 9월 30일, 2월 31일 → 2월 말일
-                    int paymentDay = Math.min(
-                            expense.paymentDay(),
-                            targetMonth.lengthOfMonth()
-                    );
-
-                    LocalDate paymentDate = targetMonth.atDay(paymentDay);
-
-                    RecurringPaymentResponse payment = payments.get(expense.id());
-
-                    return new MonthlyPaymentItem(
-                            expense.id(),
-                            expense.categoryId(),
-                            expense.categoryName(),
-                            expense.title(),
-                            expense.amount(),
-                            paymentDate,
-                            expense.paymentMethod(),
-                            payment != null,
-                            payment == null ? null : payment.expenseId(),
-                            payment == null ? null : payment.paidDate()
-                    );
-                })
-
-                // 납부 예정일이 빠른 순서로 정렬한다.
-                // 같은 날짜이면 ID 순서로 정렬한다.
-                .sorted(
-                        Comparator.comparing(
-                                MonthlyPaymentItem::paymentDate
-                        ).thenComparing(MonthlyPaymentItem::id)
-                )
-                .toList();
-
-        // 표시 대상의 현재 고정 지출 설정 금액을 합산한다.
-        // 미납 잔액이나 실제 납부한 생활비 합계가 아니며, 대상이 없으면 0을 반환한다.
-        BigDecimal totalAmount = items.stream()
-                .map(MonthlyPaymentItem::amount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        return new MonthlyResponse(
-                targetMonth.toString(),
-                totalAmount,
-                items
-        );
     }
 
     /**
@@ -357,5 +354,18 @@ public class RecurringExpenseService {
             );
         }
     }
+
+    /**
+     * 대시보드에서 사용할 해당 월의 전체 고정 지출 예정 합계를 조회한다.
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal getMonthlyTotalAmount(Long userId, String monthText) {
+        LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
+        BigDecimal amount =
+                recurringExpenseMapper.sumMonthlyAmount(userId, monthStart);
+
+        return amount == null ? BigDecimal.ZERO : amount;
+    }
+
 
 }

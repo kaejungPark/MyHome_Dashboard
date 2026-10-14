@@ -1,11 +1,14 @@
 package com.myhome.schedule;
 
+import com.myhome.common.response.PageResponse;
 import com.myhome.common.validation.DateValidator;
+import com.myhome.common.validation.MonthValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import com.myhome.common.validation.PageValidator;
+import com.myhome.common.util.PageUtils;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -23,9 +26,39 @@ public class ScheduleService {
      * 로그인한 사용자의 일정만 조회한다.
      */
     @Transactional(readOnly = true)
-    public List<ScheduleResponse> getSchedul(Long userId) {
+    public PageResponse<ScheduleResponse> getSchedul(
+            Long userId,
+            String month,
+            int page,
+            int size
+    ) {
+        // 페이지 번호와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
 
-        return scheduleMapper.findSchedule(userId);
+        LocalDate monthValid = MonthValidator.parseMonth(month).atDay(1);
+
+        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 목록과 동일한 조건으로 전체 일정 수를 조회한다.
+        long totalCount = scheduleMapper.countAll(userId, monthValid);
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        // 조회 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
+        List<ScheduleResponse> items = offset >= totalCount
+                ? List.of()
+                : scheduleMapper.findPage(userId, monthValid, offset, size);
+
+        return new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
+
     }
 
     /**

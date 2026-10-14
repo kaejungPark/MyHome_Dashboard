@@ -2,14 +2,12 @@ package com.myhome.homeItem;
 
 import com.myhome.auth.LoginUser;
 import com.myhome.common.response.ApiResponse;
+import com.myhome.common.response.PageResponse;
 import jakarta.validation.Valid;
-import org.apache.ibatis.annotations.Param;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/home-item")
@@ -22,8 +20,22 @@ public class HomeItemController {
      * GET /api/home-item: 물품 목록 조회
      * */
     @GetMapping
-    public ApiResponse<List<HomeItemResponse>> getHomeItem (@AuthenticationPrincipal LoginUser loginUser) {
-        return ApiResponse.success(homeItemService.getHomeItem(loginUser.getId()));
+    public ApiResponse<PageResponse<HomeItemResponse>> getHomeItem (
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "") String name,
+            @RequestParam(defaultValue = "") String category,
+            @RequestParam(defaultValue = "") String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.success(homeItemService.getHomeItem(
+                loginUser.getId(),
+                name,
+                category,
+                status,
+                page,
+                size
+        ));
     }
 
     /**

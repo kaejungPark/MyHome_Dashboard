@@ -1,5 +1,9 @@
 package com.myhome.householdtask;
 
+import com.myhome.common.response.PageResponse;
+import com.myhome.common.validation.PageValidator;
+import com.myhome.common.validation.PageValidator;
+import com.myhome.common.util.PageUtils;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,8 +23,51 @@ public class HouseholdTaskService {
     }
 
     @Transactional(readOnly = true)
-    public List<HouseholdTaskResponse> getTasks(Long userId) {
-        return householdTaskMapper.findTasks(userId);
+    public PageResponse<HouseholdTaskResponse> getTasks(
+            Long userId,
+            String name,
+            String taskType,
+            Boolean active,
+            int page,
+            int size
+    ) {
+        // 페이지와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
+
+        // 항목명 앞뒤 공백을 제거한다. 빈 문자열이면 검색 조건을 적용하지 않는다.
+        String searchName = name == null ? "" : name.trim();
+
+        // 미선택이면 집안일과 소모품을 모두 조회한다.
+        String searchType = taskType == null ? "" : taskType.trim();
+
+        // 예외 처리
+        if (!searchType.isEmpty() && !searchType.matches("CHORE|CONSUMABLE")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "올바른 유형을 선택해 주세요."
+            );
+        }
+
+        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 목록과 동일한 검색 조건으로 전체 게시글 수를 조회한다.
+        long totalCount = householdTaskMapper.countAll(userId, searchName, searchType, active);
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        List<HouseholdTaskResponse> items = offset >= totalCount
+                ? List.of()
+                : householdTaskMapper.findPage(userId, searchName, searchType, active, offset, size);
+
+        return new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
     }
 
     @Transactional
@@ -175,13 +222,21 @@ public class HouseholdTaskService {
      * 비활성 항목도 기존 완료 이력은 조회할 수 있다.
      */
     @Transactional(readOnly = true)
-    public List<HouseholdTaskHistoryResponse> getHistorys(Long userId, Long id) {
+    public PageResponse<HouseholdTaskHistoryResponse> getHistorys(
+            Long userId,
+            Long id,
+            int page,
+            int size
+    ) {
         if (id == null || id <= 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "올바르지 않은 항목 번호입니다."
             );
         }
+
+        // 페이지와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
 
         // 이력 조회 전에 관리 항목의 소유 여부를 확인한다.
         if (householdTaskMapper.findByIdAndUserId(id, userId) == null) {
@@ -191,6 +246,26 @@ public class HouseholdTaskService {
             );
         }
 
-        return householdTaskMapper.findHistories(id);
+        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 목록과 동일한 검색 조건으로 전체 게시글 수를 조회한다.
+        long totalCount = householdTaskMapper.countAllHistrory(id);
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        List<HouseholdTaskHistoryResponse> items = offset >= totalCount
+                ? List.of()
+                : householdTaskMapper.findPageHistrory(id, offset, size);
+
+        return new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
+
     }
 }

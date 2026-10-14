@@ -1,11 +1,13 @@
 package com.myhome.ingredient;
 
+import com.myhome.common.response.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import com.myhome.common.validation.PageValidator;
+import com.myhome.common.util.PageUtils;
 import java.util.List;
 
 @Service
@@ -20,8 +22,62 @@ public class IngredientService {
      * 로그인한 사용자 ID로 범위를 제한해 식재료 목록을 조회한다.
      * */
     @Transactional(readOnly = true)
-    public List<IngredientResponse> getIngredients(Long userId) {
-        return ingredientMapper.findIngredients(userId);
+    public PageResponse<IngredientResponse> getIngredients(
+            Long userId,
+            String keyword,
+            String storageLocation,
+            String status,
+            int page,
+            int size
+    ) {
+        // 페이지와 페이지 크기를 검증한다.
+        PageValidator.validate(page, size);
+
+        // 검색어 앞뒤 공백을 제거한다. 빈 문자열이면 검색 조건을 적용하지 않는다.
+        String searchKeyword = keyword == null ? "" : keyword.trim();
+
+        // 미선택이면 전체 장소를 조회한다.
+        String location = storageLocation == null ? "" : storageLocation.trim();
+
+        // 예외 처리
+        if (!location.isEmpty() && !location.matches("REFRIGERATOR|FREEZER|PANTRY")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "올바른 보관 장소를 선택해 주세요."
+            );
+        }
+
+        // 미선택이면 전체 상태를 조회한다.
+        String statusType = status == null ? "" : status.trim();
+
+        // 예외 처리
+        if (!statusType.isEmpty() && !statusType.matches("STORED|CONSUMED|DISPOSED")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "올바른 상태를 선택해 주세요."
+            );
+        }
+
+        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        long offset = PageUtils.calculateOffset(page, size);
+
+        // 목록과 동일한 검색 조건으로 전체 게시글 수를 조회한다.
+        long totalCount = ingredientMapper.countAll(userId, searchKeyword, location, statusType);
+
+        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        long totalPages = PageUtils.calculateTotalPages(totalCount, size);
+
+        List<IngredientResponse> items = offset >= totalCount
+                ? List.of()
+                : ingredientMapper.findPage(userId, searchKeyword, location, statusType, offset, size);
+
+        return new PageResponse<>(
+                items,
+                page,
+                size,
+                totalCount,
+                totalPages
+        );
     }
 
     /**

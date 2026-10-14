@@ -2,6 +2,7 @@ package com.myhome.householdtask;
 
 import com.myhome.auth.LoginUser;
 import com.myhome.common.response.ApiResponse;
+import com.myhome.common.response.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -23,8 +24,22 @@ public class HouseholdTaskController {
      * 로그인한 사용자의 집안일·소모품 관리 항목을 조회한다.
      */
     @GetMapping
-    public ApiResponse<List<HouseholdTaskResponse>> getTasks (@AuthenticationPrincipal LoginUser loginUser) {
-        return ApiResponse.success(householdTaskService.getTasks(loginUser.getId()));
+    public ApiResponse<PageResponse<HouseholdTaskResponse>> getTasks (
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "") String name,
+            @RequestParam(defaultValue = "") String taskType,
+            @RequestParam(required = false) Boolean active,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.success(householdTaskService.getTasks(
+                loginUser.getId(),
+                name,
+                taskType,
+                active,
+                page,
+                size
+        ));
     }
 
     /**
@@ -88,11 +103,18 @@ public class HouseholdTaskController {
      * 본인 소유 항목인지 서비스에서 확인한다.
      */
     @GetMapping("/{id}/completions")
-    public ApiResponse<List<HouseholdTaskHistoryResponse>> getHistorys (
+    public ApiResponse<PageResponse<HouseholdTaskHistoryResponse>> getHistorys (
             @AuthenticationPrincipal LoginUser loginUser,
-            @PathVariable ("id") Long id
+            @PathVariable ("id") Long id,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
     ) {
-        return ApiResponse.success(householdTaskService.getHistorys(loginUser.getId(), id));
+        return ApiResponse.success(householdTaskService.getHistorys(
+                loginUser.getId(),
+                id,
+                page,
+                size
+        ));
     }
 
 }

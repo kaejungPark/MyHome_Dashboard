@@ -2,13 +2,12 @@ package com.myhome.ingredient;
 
 import com.myhome.auth.LoginUser;
 import com.myhome.common.response.ApiResponse;
+import com.myhome.common.response.PageResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/ingredients")
@@ -25,8 +24,22 @@ public class IngredientController {
      * 보관 중·소비 완료·폐기 상태를 모두 포함한다.
      */
     @GetMapping
-    public ApiResponse<List<IngredientResponse>> getIngredients (@AuthenticationPrincipal LoginUser loginUser) {
-        return ApiResponse.success(ingredientService.getIngredients(loginUser.getId()));
+    public ApiResponse<PageResponse<IngredientResponse>> getIngredients (
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "") String storageLocation,
+            @RequestParam(defaultValue = "") String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return ApiResponse.success(ingredientService.getIngredients(
+                loginUser.getId(),
+                keyword,
+                storageLocation,
+                status,
+                page,
+                size
+        ));
     }
 
     /**

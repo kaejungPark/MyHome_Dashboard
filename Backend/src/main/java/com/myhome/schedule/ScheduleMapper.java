@@ -1,17 +1,30 @@
 package com.myhome.schedule;
 
-import jakarta.validation.Valid;
 import org.apache.ibatis.annotations.*;
-
+import java.time.LocalDate;
 import java.util.List;
 
 @Mapper
 public interface ScheduleMapper {
 
     /**
-     * 현재 사용자의 일정 목록을 조회한다.
-     * 미완료 일정을 먼저 표시하고, 마감일과 ID 순서로 정렬한다.
-     * 컬럼 순서는 ScheduleResponse의 생성자 인자 순서에 맞춘다.
+     * 로그인한 사용자의 일정 중 조회 월과 기간이 겹치는 전체 개수를 조회한다.
+     */
+    @Select("""
+            SELECT COUNT_BIG(*)
+            FROM dbo.SCHEDULE
+            WHERE USER_ID = #{userId}
+            AND START_DATE <= EOMONTH(#{monthValid,jdbcType=DATE})
+            AND DUE_DATE >= #{monthValid,jdbcType=DATE}
+    """)
+    long countAll(
+            @Param("userId") Long userId,
+            @Param("monthValid") LocalDate monthValid
+    );
+
+    /**
+     * 조회 월과 기간이 겹치는 일정을 페이지 단위로 조회한다.
+     * 미완료 일정부터 마감일과 ID 순으로 정렬한다.
      */
     @Select("""
             SELECT
@@ -25,9 +38,17 @@ public interface ScheduleMapper {
                 MEMO AS memo
             FROM dbo.SCHEDULE
             WHERE USER_ID = #{userId}
+            AND START_DATE <= EOMONTH(#{monthValid,jdbcType=DATE})
+            AND DUE_DATE >= #{monthValid,jdbcType=DATE}
             ORDER BY IS_COMPLETED, DUE_DATE, ID
-            """)
-    List<ScheduleResponse> findSchedule(@Param("userId") Long userId);
+            OFFSET #{offset} ROWS
+            FETCH NEXT #{size} ROWS ONLY
+    """)
+    List<ScheduleResponse> findPage(
+            @Param("userId") Long userId,
+            @Param("monthValid") LocalDate monthValid,
+            @Param("offset") long offset,
+            @Param("size") int size);
 
     /**
      * 현재 사용자의 일정을 등록하고 저장된 행 수를 반환한다.
@@ -88,5 +109,4 @@ public interface ScheduleMapper {
           AND USER_ID = #{userId}
         """)
     int delete(@Param("id") Long id, @Param("userId") Long userId);
-
 }

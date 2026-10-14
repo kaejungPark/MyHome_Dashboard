@@ -2,32 +2,76 @@ package com.myhome.homeItem;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.*;
-
 import java.util.List;
 
 @Mapper
 public interface HomeItemMapper {
+
     /**
-     * 현재 사용자의 물품 목록을 최신 등록 순서로 조회한다.
-     * 컬럼 순서는 HomeItemResponse의 생성자 인자 순서에 맞춘다.
+     * 로그인한 사용자의 물품 중 물품명·물품 분류·상태 조건에 맞는 전체 개수를 조회한다.
+     * 검색어와 필터가 비어 있으면 해당 조건을 적용하지 않는다.
      */
     @Select("""
+            <script>
+            SELECT COUNT_BIG(*)
+            FROM dbo.HOME_ITEM h
+            WHERE h.USER_ID = #{userId}
+             <if test="searchName != null and searchName != ''">
+                AND h.NAME LIKE CONCAT('%', #{searchName}, '%')
+             </if>
+             <if test="searchCategory != null and searchCategory != ''">
+                AND h.CATEGORY LIKE CONCAT('%', #{searchCategory}, '%')
+             </if>
+             <if test="statusType != null and statusType != ''">
+                AND h.STATUS = #{statusType}
+             </if>
+            </script>
+    """)
+    long countAll(
+            @Param("userId") Long userId,
+            @Param("searchName") String searchName,
+            @Param("searchCategory") String searchCategory,
+            @Param("statusType") String statusType
+    );
+
+    /**
+     * 현재 사용자의 물품을 등록일과 ID 기준 최신순으로 조회한다.
+     */
+    @Select("""
+            <script>
             SELECT
-                ID AS id,
-                NAME AS name,
-                CATEGORY AS category,
-                PURCHASE_DATE AS purchaseDate,
-                PURCHASE_PRICE AS purchasePrice,
-                WARRANTY_END_DATE AS warrantyEndDate,
-                MAINTENANCE_CYCLE_DAYS AS maintenanceCycle,
-                STATUS AS status,
-                MEMO AS memo
-            FROM dbo.HOME_ITEM
-            WHERE USER_ID = #{userId}
-            ORDER BY ID DESC
+                h.ID AS id,
+                h.NAME AS name,
+                h.CATEGORY AS category,
+                h.PURCHASE_DATE AS purchaseDate,
+                h.PURCHASE_PRICE AS purchasePrice,
+                h.WARRANTY_END_DATE AS warrantyEndDate,
+                h.MAINTENANCE_CYCLE_DAYS AS maintenanceCycle,
+                h.STATUS AS status,
+                h.MEMO AS memo
+            FROM dbo.HOME_ITEM h
+            WHERE h.USER_ID = #{userId}
+             <if test="searchName != null and searchName != ''">
+                AND h.NAME LIKE CONCAT('%', #{searchName}, '%')
+             </if>
+             <if test="searchCategory != null and searchCategory != ''">
+                AND h.CATEGORY LIKE CONCAT('%', #{searchCategory}, '%')
+             </if>
+             <if test="statusType != null and statusType != ''">
+                AND h.STATUS = #{statusType}
+             </if>
+            ORDER BY h.CREATED_DT DESC, h.ID DESC
+            OFFSET #{offset} ROWS
+            FETCH NEXT #{size} ROWS ONLY
+            </script>
             """)
-    List<HomeItemResponse> findHomeItem(
-            @Param("userId") Long userId
+    List<HomeItemResponse> findPage(
+            @Param("userId") Long userId,
+            @Param("searchName") String searchName,
+            @Param("searchCategory") String searchCategory,
+            @Param("statusType") String statusType,
+            @Param("offset") long offset,
+            @Param("size") int size
     );
 
     /**
@@ -102,4 +146,6 @@ public interface HomeItemMapper {
             @Param("id") Long id,
             @Param("userId") Long userId
     );
+
+
 }

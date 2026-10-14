@@ -8,9 +8,36 @@ import java.util.List;
 public interface IngredientMapper {
 
     /**
+     * 로그인한 사용자의 식재료 중 이름·보관 장소·상태 조건에 맞는 전체 개수를 조회한다.
+     * 검색어와 필터가 비어 있으면 해당 조건을 적용하지 않는다.
+     */
+    @Select("""
+        <script>
+         SELECT COUNT_BIG(*)
+         FROM dbo.INGREDIENT i
+         WHERE i.USER_ID = #{userId}
+           <if test="searchKeyword != null and searchKeyword != ''">
+               AND i.NAME LIKE CONCAT('%', #{searchKeyword}, '%')
+           </if>
+           <if test="location != null and location != ''">
+               AND i.STORAGE_LOCATION = #{location}
+           </if>
+           <if test="statusType != null and statusType != ''">
+               AND i.STATUS = #{statusType}
+           </if>
+         </script>
+    """)
+    long countAll(
+            @Param("userId") Long userId,
+            @Param("searchKeyword") String searchKeyword,
+            @Param("location") String location,
+            @Param("statusType") String statusType);
+
+    /**
      * 현재 사용자의 식재료를 등록일과 ID 기준 최신순으로 조회한다.
      */
     @Select("""
+        <script>
         SELECT
             i.ID AS id,
             i.NAME AS name,
@@ -23,9 +50,28 @@ public interface IngredientMapper {
             i.MEMO AS memo
         FROM dbo.INGREDIENT i
         WHERE i.USER_ID = #{userId}
-        ORDER BY i.CREATED_DT DESC, i.ID DESC
+            <if test="searchKeyword != null and searchKeyword != ''">
+                AND i.NAME LIKE CONCAT('%', #{searchKeyword}, '%')
+            </if>
+            <if test="location != null and location != ''">
+                AND i.STORAGE_LOCATION = #{location}
+            </if>
+            <if test="statusType != null and statusType != ''">
+                AND i.STATUS = #{statusType}
+            </if>
+            ORDER BY i.CREATED_DT DESC, i.ID DESC
+            OFFSET #{offset} ROWS
+            FETCH NEXT #{size} ROWS ONLY
+        </script>
         """)
-    List<IngredientResponse> findIngredients(@Param("userId") Long userId);
+    List<IngredientResponse> findPage(
+            @Param("userId") Long userId,
+            @Param("searchKeyword") String searchKeyword,
+            @Param("location") String location,
+            @Param("statusType") String statusType,
+            @Param("offset") long offset,
+            @Param("size") int size
+    );
 
     /**
      * 식재료를 등록하고 저장된 행 수를 반환한다.
@@ -97,4 +143,6 @@ public interface IngredientMapper {
             @Param("userId") Long userId,
             @Param("id") Long id
     );
+
+
 }

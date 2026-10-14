@@ -22,7 +22,7 @@ public interface CommunityMapper {
         c.IS_HIDDEN = 0
         <if test="keyword != null and keyword != ''">
             <choose>
-                <when test="searchType == 'NICKNAME'">
+                <when test="searchType == 'NICKNAME'">  
                     AND CHARINDEX(#{keyword,jdbcType=NVARCHAR}, u.NICKNAME) > 0
                 </when>
                 <otherwise>
