@@ -103,6 +103,7 @@ async function saveTask() {
   const name = form.name.trim()
   const memo = form.memo.trim()
 
+  // 등록 수정 필수 validation 검증
   if (!name || name.length > 100) {
     errorMessage.value = '항목명은 1~100자로 입력해 주세요.'
     return
@@ -322,7 +323,7 @@ async function completeTask() {
   }
 }
 
-// 로그인 상태에서는 본인의 집안일·소모품 목록을, 비로그인 상태에서는 체험 목록을 조회한다.
+// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 목록을 표시한다.
 async function loadData() {
   if (loading.value) return
 
