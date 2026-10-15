@@ -2,13 +2,16 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Carrot, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
+import { Carrot, Plus, Pencil, Trash2, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
+import type { PageResponse } from '../types/page'
+import { paginateDemo } from '../mocks/paginateDemo'
+import Pagination from '../components/Pagination.vue'
 
-// 식재료 보관 장소 상태값
-type IngredientStorageLocation = 'REFRIGERATOR' | 'FREEZER' | 'PANTRY'
-// 식재료 상태값
-type IngredientStatus = 'STORED' | 'CONSUMED' | 'DISPOSED'
+type IngredientStorageLocation = 'REFRIGERATOR' | 'FREEZER' | 'PANTRY' // 식재료 보관 장소 상태값
+type IngredientStatus = 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태값
+type SearchLocation = '' | 'REFRIGERATOR' | 'FREEZER' | 'PANTRY' // 식재료 보관 장소 조회
+type SearchStatus = '' | 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태값 조회
 
 // 식재료 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Ingredient {
@@ -28,6 +31,13 @@ const isDemo = ref(false)
 const { canModify } = useDemoGuard(isDemo)
 
 const Ingredients = ref<Ingredient[]>([])
+const page = ref(1)
+const size = ref(5)
+const totalCount = ref(0)
+const totalPages = ref(0)
+const searchKeyword = ref('')
+const searchLocations = ref<SearchLocation>('')
+const searchStatus = ref<SearchStatus>('')
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
 const editingId = ref<number | null>(null) // null이면 신규 등록
@@ -103,6 +113,14 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
+// 다시 조회할 때는 첫 페이지부터 표시한다.
+async function searchIngredients() {
+  if (loading.value || saving.value) return
+
+  page.value = 1
+  await loadData()
+}
+
 // 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 목록을 표시한다.
 async function loadData() {
   if (loading.value) return
@@ -110,22 +128,73 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   Ingredients.value = []
+  totalCount.value = 0
+  totalPages.value = 0
   isDemo.value = false
 
   try {
-    const demo = createDemoData()
+    const keyword = searchKeyword.value.trim()
+    const storageLocation = searchLocations.value
+    const status = searchStatus.value
+    const currentPage = page.value
+    const pageSize = size.value
 
-    const [result] = await Promise.all([
-      requestWithDemo<Ingredient[]>(baseUrl, () => demo.ingredients),
-    ])
+    // 검색어의 공백과 특수문자를 안전하게 URL에 포함한다.
+    const params = new URLSearchParams({
+      keyword,
+      storageLocation,
+      status,
+      page: String(currentPage),
+      size: String(pageSize),
+    })
 
-    Ingredients.value = result.data
+    const result = await requestWithDemo<PageResponse<Ingredient>>(
+      `${baseUrl}?${params.toString()}`,
+      () => {
+        const demo = createDemoData()
+
+        const filtered = demo.ingredients.filter(
+          (ingredients) =>
+            (!keyword || ingredients.name.toLowerCase().includes(keyword.toLowerCase())) &&
+            (!storageLocation || ingredients.storageLocation === storageLocation) &&
+            (!status || ingredients.status === status),
+        )
+
+        // 샘플의 기존 배열 순서를 유지하며 페이지를 나눈다.
+        return paginateDemo(filtered, currentPage, pageSize)
+      },
+    )
+
+    Ingredients.value = result.data.items
+    page.value = result.data.page
+    size.value = result.data.size
+    totalCount.value = result.data.totalCount
+    totalPages.value = result.data.totalPages
     isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)
   } finally {
     loading.value = false
   }
+}
+
+// 선택한 페이지의 식재료 목록을 다시 조회한다.
+async function changePage(targetPage: number) {
+  if (loading.value || saving.value) return
+  if (targetPage < 1 || targetPage > totalPages.value) return
+  if (targetPage === page.value) return
+
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
+    return
+  }
+
+  if (editingId.value !== null) {
+    resetForm()
+  }
+
+  notice.value = ''
+  page.value = targetPage
+  await loadData()
 }
 
 // 수정 상태를 해제하고 신규 등록 폼으로 되돌린다.
@@ -419,18 +488,44 @@ onMounted(loadData)
         <div class="heading-title">
           <List :size="20" aria-hidden="true" />
           <h2 id="ingredient-list-heading">식재료 목록</h2>
-          <span v-if="!loading" class="count-badge"> {{ Ingredients.length }}건 </span>
+          <span v-if="!loading" class="count-badge"> {{ totalCount }}건 </span>
         </div>
+        <!-- 식재료명·보관 장소·상태를 함께 적용해 검색한다. -->
+        <form class="ingredient-search" @submit.prevent="searchIngredients">
+          <label class="search-field">
+            식재료명
+            <input
+              v-model="searchKeyword"
+              type="search"
+              placeholder="식재료명 입력"
+              :disabled="loading || saving"
+            />
+          </label>
 
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading || saving"
-          @click="loadData"
-        >
-          <RefreshCw :size="16" aria-hidden="true" />
-          새로고침
-        </button>
+          <label class="search-field status-field">
+            상태
+            <select v-model="searchLocations" :disabled="loading || saving">
+              <option value="">전체</option>
+              <option value="REFRIGERATOR">냉장</option>
+              <option value="FREEZER">냉동</option>
+              <option value="PANTRY">실온</option>
+            </select>
+          </label>
+
+          <label class="search-field status-field">
+            상태
+            <select v-model="searchStatus" :disabled="loading || saving">
+              <option value="">전체</option>
+              <option value="STORED">보관 중</option>
+              <option value="CONSUMED">소비 완료</option>
+              <option value="DISPOSED">폐기</option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn btn-primary" :disabled="loading || saving">
+            {{ loading ? '조회 중...' : '검색' }}
+          </button>
+        </form>
       </div>
 
       <p v-if="loading" class="empty-state" role="status">식재료를 불러오는 중입니다.</p>
@@ -534,6 +629,12 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <Pagination
+        :page="page"
+        :total-pages="totalPages"
+        :disabled="loading || saving"
+        @change="changePage"
+      />
     </section>
   </section>
 </template>
@@ -617,10 +718,85 @@ onMounted(loadData)
   margin-top: 2px;
 }
 
+/* 검색 필터와 버튼을 목록 상단 오른쪽에 배치한다. */
+.ingredient-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.ingredient-search .search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ingredient-search input,
+.ingredient-search select {
+  box-sizing: border-box;
+  width: 180px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #1e293b;
+  font: inherit;
+  font-weight: 400;
+}
+
+.ingredient-search .status-field select {
+  width: 120px;
+}
+
+.ingredient-search input:focus-visible,
+.ingredient-search select:focus-visible {
+  outline: 3px solid #dbeafe;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+.ingredient-search input:disabled,
+.ingredient-search select:disabled {
+  background-color: #f8fafc;
+  cursor: not-allowed;
+}
+
+.ingredient-search .btn {
+  min-height: 44px;
+}
+
 @media (max-width: 560px) {
   .ingredient-page .card-heading {
     flex-wrap: wrap;
     gap: 12px;
+  }
+  .ingredient-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ingredient-search .search-field {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .ingredient-search input,
+  .ingredient-search .status-field select {
+    width: 100%;
+  }
+
+  .ingredient-search .btn {
+    width: 100%;
   }
 }
 </style>

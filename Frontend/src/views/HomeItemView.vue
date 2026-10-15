@@ -2,11 +2,17 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Package, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 관리 화면의 제목과 주요 동작에 사용할 아이콘
+import { Package, Plus, Pencil, Trash2, List } from '@lucide/vue' // 관리 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
+import type { PageResponse } from '../types/page'
+import { paginateDemo } from '../mocks/paginateDemo'
+import Pagination from '../components/Pagination.vue'
 
-// 물품 상태에 사용할 수 있는 값이다.
+// 물품 상태에 사용
 type HomeItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
+
+// 물품 상태 조회
+type SearchStatus = '' | 'IN_USE' | 'STORED' | 'DISPOSED'
 
 // 물품 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface HomeItem {
@@ -27,6 +33,13 @@ const { canModify } = useDemoGuard(isDemo)
 
 // 조회 결과와 화면 처리 상태를 관리한다.
 const homeItems = ref<HomeItem[]>([])
+const page = ref(1)
+const size = ref(5)
+const totalCount = ref(0)
+const totalPages = ref(0)
+const searchName = ref('')
+const searchCategory = ref('')
+const searchStatus = ref<SearchStatus>('')
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
 const editingId = ref<number | null>(null) // null이면 신규 등록
@@ -72,6 +85,14 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
+// 다시 조회할 때는 첫 페이지부터 표시한다.
+async function searchHomeItems() {
+  if (loading.value || saving.value) return
+
+  page.value = 1
+  await loadData()
+}
+
 // 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 물품 목록을 표시한다.
 async function loadData() {
   if (loading.value) return
@@ -79,22 +100,74 @@ async function loadData() {
   loading.value = true
   errorMessage.value = ''
   homeItems.value = []
+  totalCount.value = 0
+  totalPages.value = 0
   isDemo.value = false
 
   try {
-    const demo = createDemoData()
+    const name = searchName.value.trim()
+    const category = searchCategory.value.trim()
+    const status = searchStatus.value
+    const currentPage = page.value
+    const pageSize = size.value
 
-    const [homeItemResult] = await Promise.all([
-      requestWithDemo<HomeItem[]>(baseUrl, () => demo.items),
-    ])
+    // 검색어의 공백과 특수문자를 안전하게 URL에 포함한다.
+    const params = new URLSearchParams({
+      name,
+      category,
+      status,
+      page: String(currentPage),
+      size: String(pageSize),
+    })
 
-    homeItems.value = homeItemResult.data
-    isDemo.value = homeItemResult.isDemo
+    const result = await requestWithDemo<PageResponse<HomeItem>>(
+      `${baseUrl}?${params.toString()}`,
+      () => {
+        const demo = createDemoData()
+
+        // 이름·분류는 부분 검색하고, 상태는 정확히 일치하는 항목을 찾는다.
+        const filtered = demo.items.filter(
+          (item) =>
+            (!name || item.name.toLowerCase().includes(name.toLowerCase())) &&
+            (!category || item.category.toLowerCase().includes(category.toLowerCase())) &&
+            (!status || item.status === status),
+        )
+
+        // 샘플의 기존 배열 순서를 유지하며 페이지를 나눈다.
+        return paginateDemo(filtered, currentPage, pageSize)
+      },
+    )
+
+    homeItems.value = result.data.items
+    page.value = result.data.page
+    size.value = result.data.size
+    totalCount.value = result.data.totalCount
+    totalPages.value = result.data.totalPages
+    isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)
   } finally {
     loading.value = false
   }
+}
+
+// 선택한 페이지의 물품 목록을 다시 조회한다.
+async function changePage(targetPage: number) {
+  if (loading.value || saving.value) return
+  if (targetPage < 1 || targetPage > totalPages.value) return
+  if (targetPage === page.value) return
+
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
+    return
+  }
+
+  if (editingId.value !== null) {
+    resetForm()
+  }
+
+  notice.value = ''
+  page.value = targetPage
+  await loadData()
 }
 
 // 수정 상태를 해제하고 신규 등록 폼으로 되돌린다.
@@ -350,17 +423,44 @@ onMounted(loadData)
         <div class="heading-title">
           <List :size="20" aria-hidden="true" />
           <h2 id="item-list-heading">물품 목록</h2>
-          <span v-if="!loading" class="count-badge"> {{ homeItems.length }}건</span>
+          <span v-if="!loading" class="count-badge"> {{ totalCount }}건</span>
         </div>
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading || saving"
-          @click="loadData"
-        >
-          <RefreshCw :size="16" aria-hidden="true" />
-          새로고침
-        </button>
+        <!-- 물품명·분류·상태를 함께 적용해 검색한다. -->
+        <form class="item-search" @submit.prevent="searchHomeItems">
+          <label class="search-field">
+            물품명
+            <input
+              v-model="searchName"
+              type="search"
+              placeholder="물품명 입력"
+              :disabled="loading || saving"
+            />
+          </label>
+
+          <label class="search-field">
+            분류
+            <input
+              v-model="searchCategory"
+              type="search"
+              placeholder="예: 가전, 가구"
+              :disabled="loading || saving"
+            />
+          </label>
+
+          <label class="search-field status-field">
+            상태
+            <select v-model="searchStatus" :disabled="loading || saving">
+              <option value="">전체</option>
+              <option value="IN_USE">사용 중</option>
+              <option value="STORED">보관 중</option>
+              <option value="DISPOSED">처분</option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn btn-primary" :disabled="loading || saving">
+            {{ loading ? '조회 중...' : '검색' }}
+          </button>
+        </form>
       </div>
 
       <p v-if="loading" class="empty-state" role="status">조회 중입니다.</p>
@@ -438,6 +538,12 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <Pagination
+        :page="page"
+        :total-pages="totalPages"
+        :disabled="loading || saving"
+        @change="changePage"
+      />
     </section>
   </section>
 </template>
@@ -460,5 +566,83 @@ onMounted(loadData)
   background: #eaf1ff;
   color: #2563eb;
   font-size: 14px;
+}
+
+/* 검색 필터와 버튼을 목록 상단 오른쪽에 배치한다. */
+.item-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.item-search .search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.item-search input,
+.item-search select {
+  box-sizing: border-box;
+  width: 180px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #1e293b;
+  font: inherit;
+  font-weight: 400;
+}
+
+.item-search .status-field select {
+  width: 120px;
+}
+
+.item-search input:focus-visible,
+.item-search select:focus-visible {
+  outline: 3px solid #dbeafe;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+.item-search input:disabled,
+.item-search select:disabled {
+  background-color: #f8fafc;
+  cursor: not-allowed;
+}
+
+.item-search .btn {
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .item-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .item-search .search-field {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .item-search input,
+  .item-search .status-field select {
+    width: 100%;
+  }
+
+  .item-search .btn {
+    width: 100%;
+  }
 }
 </style>

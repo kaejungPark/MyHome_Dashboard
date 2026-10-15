@@ -86,6 +86,57 @@ export function createDemoData(selectedMonth?: string) {
     },
   ]
 
+  // 생활비 목록의 페이징을 확인하기 위한 23건의 체험 데이터다.
+  // 기존 통계·대시보드에서 사용하는 expenses와 구분한다.
+  const expenseExamples = [
+    {
+      title: '점심 식사',
+      categoryId: -1,
+      categoryName: '식비',
+      amount: 9500,
+    },
+    {
+      title: '마트 장보기',
+      categoryId: -1,
+      categoryName: '식비',
+      amount: 32000,
+    },
+    {
+      title: '주방 세제 구매',
+      categoryId: -2,
+      categoryName: '생활용품',
+      amount: 6500,
+    },
+    {
+      title: '휴지 구매',
+      categoryId: -2,
+      categoryName: '생활용품',
+      amount: 12000,
+    },
+    {
+      title: '세탁실 이용',
+      categoryId: -3,
+      categoryName: '주거비',
+      amount: 8000,
+    },
+  ]
+
+  const expenseList = Array.from({ length: 23 }, (_, index) => {
+    const sample = expenseExamples[index % expenseExamples.length]!
+
+    return {
+      id: -1001 - index,
+      categoryId: sample.categoryId,
+      categoryName: sample.categoryName,
+      title: `${sample.title} ${index + 1}`,
+      amount: sample.amount,
+      expenseDate: addDays(today, -index),
+      expenseType: 'VARIABLE',
+      paymentMethod: index % 3 === 0 ? '현금' : '카드',
+      memo: `페이지 확인용 샘플 ${index + 1}`,
+    }
+  }).sort((a, b) => b.expenseDate.localeCompare(a.expenseDate) || b.id - a.id)
+
   const schedules = [
     {
       id: -201,
@@ -478,6 +529,7 @@ export function createDemoData(selectedMonth?: string) {
   return {
     categories,
     expenses,
+    expenseList,
     schedules,
     items,
     recurringExpenses,

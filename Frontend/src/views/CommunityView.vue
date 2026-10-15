@@ -30,7 +30,7 @@ const appliedKeyword = ref('')
 
 // 현재 페이지와 페이지당 개수, 서버에서 반환한 전체 개수·페이지 수를 관리한다.
 const page = ref(1)
-const size = ref(10)
+const size = ref(5)
 const totalCount = ref(0)
 const totalPages = ref(0)
 

@@ -13,19 +13,36 @@ public interface RecurringExpenseMapper {
      * 페이지 수가 목록과 일치하도록 findPage와 동일한 조회 조건을 사용한다.
      */
     @Select("""
+        <script>
         SELECT COUNT_BIG(*)
         FROM dbo.RECURRING_EXPENSE r
         JOIN dbo.EXPENSE_CATEGORY c
             ON c.ID = r.CATEGORY_ID
         WHERE r.USER_ID = #{userId}
+         <if test="searchTitle != null and searchTitle != ''">
+            AND r.TITLE LIKE CONCAT('%', #{searchTitle}, '%')
+         </if>
+         <if test="categoryId != null">
+            AND r.CATEGORY_ID = #{categoryId}
+         </if>
+         <if test="active != null">
+             AND r.IS_ACTIVE = #{active}
+         </if>
+        </script>
     """)
-    long countAll(@Param("userId") Long userId);
+    long countAll(
+            @Param("userId") Long userId,
+            @Param("searchTitle") String searchTitle,
+            @Param("categoryId") Long categoryId,
+            @Param("active") Boolean active
+    );
 
     /**
-     * 로그인한 사용자의 고정 지출을 페이지 단위로 조회한다.
-     * 지출일 내림차순으로 정렬하고, 같은 날짜라면 ID가 큰 항목을 먼저 표시한다.
+     * 검색 조건에 맞는 본인의 고정 지출을 페이지 단위로 조회한다.
+     * 납부일과 ID를 기준으로 오름차순 정렬한다.
      */
     @Select("""
+        <script>
         SELECT
             r.ID AS id,
             r.CATEGORY_ID AS categoryId,
@@ -41,12 +58,25 @@ public interface RecurringExpenseMapper {
         FROM dbo.RECURRING_EXPENSE r
         JOIN dbo.EXPENSE_CATEGORY c ON c.ID = r.CATEGORY_ID
         WHERE r.USER_ID = #{userId}
+         <if test="searchTitle != null and searchTitle != ''">
+            AND r.TITLE LIKE CONCAT('%', #{searchTitle}, '%')
+         </if>
+         <if test="categoryId != null">
+            AND r.CATEGORY_ID = #{categoryId}
+         </if>
+         <if test="active != null">
+             AND r.IS_ACTIVE = #{active}
+         </if>
         ORDER BY r.PAYMENT_DAY, r.ID
         OFFSET #{offset} ROWS
         FETCH NEXT #{size} ROWS ONLY
+        </script>
     """)
     List<RecurringExpenseResponse> findPage(
             @Param("userId") Long userId,
+            @Param("searchTitle") String searchTitle,
+            @Param("categoryId") Long categoryId,
+            @Param("active") Boolean active,
             @Param("offset") long offset,
             @Param("size") int size
     );

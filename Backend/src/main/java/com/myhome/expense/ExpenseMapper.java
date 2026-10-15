@@ -16,19 +16,36 @@ public interface ExpenseMapper {
      * 페이지 수가 목록과 일치하도록 findPage와 동일한 조회 조건을 사용한다.
      */
     @Select("""
+        <script>
         SELECT COUNT_BIG(*)
         FROM dbo.EXPENSE e
         INNER JOIN dbo.EXPENSE_CATEGORY c
             ON c.ID = e.CATEGORY_ID
         WHERE e.USER_ID = #{userId}
+         <if test="searchTitle != null and searchTitle != ''">
+            AND e.TITLE LIKE CONCAT('%', #{searchTitle}, '%')
+         </if>
+         <if test="categoryId != null">
+            AND e.CATEGORY_ID = #{categoryId}
+         </if>
+         <if test="searchType != null and searchType != ''">
+            AND e.EXPENSE_TYPE = #{searchType}
+         </if>
+        </script>
     """)
-    long countAll(@Param("userId") Long userId);
+    long countAll(
+            @Param("userId") Long userId,
+            @Param("searchTitle") String searchTitle,
+            @Param("categoryId") Long categoryId,
+            @Param("searchType") String searchType
+    );
 
     /**
      * 로그인한 사용자의 지출을 페이지 단위로 조회한다.
      * 지출일 내림차순으로 정렬하고, 같은 날짜라면 ID가 큰 항목을 먼저 표시한다.
      */
     @Select("""
+        <script>
         SELECT
             e.ID AS id,
             e.CATEGORY_ID AS categoryId,
@@ -43,12 +60,25 @@ public interface ExpenseMapper {
         INNER JOIN dbo.EXPENSE_CATEGORY c
             ON c.ID = e.CATEGORY_ID
         WHERE e.USER_ID = #{userId}
+         <if test="searchTitle != null and searchTitle != ''">
+            AND e.TITLE LIKE CONCAT('%', #{searchTitle}, '%')
+         </if>
+         <if test="categoryId != null">
+            AND e.CATEGORY_ID = #{categoryId}
+         </if>
+         <if test="searchType != null and searchType != ''">
+            AND e.EXPENSE_TYPE = #{searchType}
+         </if>
         ORDER BY e.EXPENSE_DATE DESC, e.ID DESC
         OFFSET #{offset} ROWS
         FETCH NEXT #{size} ROWS ONLY
+        </script>
     """)
     List<ExpenseResponse> findPage(
             @Param("userId") Long userId,
+            @Param("searchTitle") String searchTitle,
+            @Param("categoryId") Long categoryId,
+            @Param("searchType") String searchType,
             @Param("offset") long offset,
             @Param("size") int size
     );

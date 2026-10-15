@@ -2,8 +2,11 @@
 import { onMounted, ref, reactive } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { CalendarDays, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
+import { CalendarDays, Plus, Pencil, Trash2, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
+import type { PageResponse } from '../types/page'
+import { paginateDemo } from '../mocks/paginateDemo'
+import Pagination from '../components/Pagination.vue'
 
 // 일정 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Schedule {
@@ -23,11 +26,19 @@ const { canModify } = useDemoGuard(isDemo)
 
 // 조회 결과와 화면 처리 상태를 관리한다.
 const schedules = ref<Schedule[]>([])
+const page = ref(1)
+const size = ref(5)
+const totalCount = ref(0)
+const totalPages = ref(0)
 const loading = ref(false)
 const saving = ref(false)
 const errorMessage = ref('')
 const notice = ref('')
 const editingId = ref<number | null>(null)
+
+// 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
+const now = new Date()
+const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
 
 // 사용자 PC 기준 오늘 날짜를 YYYY-MM-DD 문자열로 반환한다.
 function today(): string {
@@ -76,28 +87,92 @@ function showError(error: unknown) {
   errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
 }
 
-// 일정 목록을 조회하고, 비로그인 응답이면 공통 함수가 반환한 체험 데이터를 표시한다.
-// 조회를 시작할 때 이전 목록을 비워 오류 발생 시 오래된 정보가 남지 않도록 한다.
+// 다른 월을 조회할 때는 첫 페이지부터 표시한다.
+async function searchSchedules() {
+  if (loading.value || saving.value) return
+
+  page.value = 1
+  await loadData()
+}
+
+// 선택한 월과 기간이 겹치는 일정을 페이지 단위로 조회한다.
+// 체험 데이터에도 서버와 동일한 월 조건과 정렬을 적용한다.
 async function loadData() {
+  if (loading.value) return
+
   loading.value = true
   errorMessage.value = ''
   schedules.value = []
+  totalCount.value = 0
+  totalPages.value = 0
   isDemo.value = false
 
   try {
-    const demo = createDemoData()
+    const selectedMonth = month.value
 
-    const [scheduleResult] = await Promise.all([
-      requestWithDemo<Schedule[]>('/api/schedules', () => demo.schedules),
-    ])
+    // month validation
+    if (!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)) {
+      throw new Error('조회 월을 선택해 주세요.')
+    }
 
-    schedules.value = scheduleResult.data
-    isDemo.value = scheduleResult.isDemo
+    const year = Number(selectedMonth.slice(0, 4))
+
+    if (year < 1 || year > 9998) {
+      throw new Error('지원하지 않는 연도입니다.')
+    }
+
+    const result = await requestWithDemo<PageResponse<Schedule>>(
+      `/api/schedules/${selectedMonth}?page=${page.value}&size=${size.value}`,
+      () => {
+        const demo = createDemoData(selectedMonth)
+
+        // YYYY-MM 형식으로 비교해 조회 월과 겹치는 일정을 추린다.
+        const filtered = demo.schedules
+          .filter(
+            (item) =>
+              item.startDate.slice(0, 7) <= selectedMonth &&
+              item.dueDate.slice(0, 7) >= selectedMonth,
+          )
+          .sort(
+            (a, b) =>
+              Number(a.completed) - Number(b.completed) ||
+              a.dueDate.localeCompare(b.dueDate) ||
+              a.id - b.id,
+          )
+        return paginateDemo(filtered, page.value, size.value)
+      },
+    )
+
+    schedules.value = result.data.items
+    page.value = result.data.page
+    size.value = result.data.size
+    totalCount.value = result.data.totalCount
+    totalPages.value = result.data.totalPages
+    isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)
   } finally {
     loading.value = false
   }
+}
+
+// 선택한 페이지의 지출 목록을 다시 조회한다.
+async function changePage(targetPage: number) {
+  if (loading.value || saving.value) return
+  if (targetPage < 1 || targetPage > totalPages.value) return
+  if (targetPage === page.value) return
+
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
+    return
+  }
+
+  if (editingId.value !== null) {
+    resetForm()
+  }
+
+  notice.value = ''
+  page.value = targetPage
+  await loadData()
 }
 
 // 수정 중이면 PUT, 새 등록이면 POST로 저장한다.
@@ -320,18 +395,27 @@ onMounted(loadData)
         <div class="heading-title">
           <List :size="20" aria-hidden="true" />
           <h2 id="schedule-list-heading">일정 목록</h2>
-          <span v-if="!loading" class="count-badge"> {{ schedules.length }}건</span>
+          <span v-if="!loading" class="count-badge"> {{ totalCount }}건</span>
         </div>
 
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading || saving"
-          @click="loadData"
-        >
-          <RefreshCw :size="16" aria-hidden="true" />
-          새로고침
-        </button>
+        <!-- 조회 월을 선택하고 해당 월의 일정을 검색한다. -->
+        <form class="month-search" @submit.prevent="searchSchedules">
+          <label class="month-field">
+            조회 월
+            <input
+              v-model="month"
+              type="month"
+              min="0001-01"
+              max="9998-12"
+              :disabled="loading || saving"
+              required
+            />
+          </label>
+
+          <button type="submit" class="btn btn-primary" :disabled="loading || saving">
+            {{ loading ? '조회 중...' : '조회' }}
+          </button>
+        </form>
       </div>
 
       <p v-if="loading" class="empty-state" role="status">조회 중입니다.</p>
@@ -404,6 +488,13 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <!-- 목록 카드 내부에서 페이지 이동 버튼을 표시한다. -->
+      <Pagination
+        :page="page"
+        :total-pages="totalPages"
+        :disabled="loading || saving"
+        @change="changePage"
+      />
     </section>
   </section>
 </template>
@@ -432,5 +523,56 @@ onMounted(loadData)
   background: #eaf1ff;
   color: #2563eb;
   font-size: 14px;
+}
+
+/* 월 선택과 조회 버튼을 한 줄에 배치한다. */
+.month-search {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.month-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.month-field input {
+  width: 240px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #1e293b;
+  font: inherit;
+}
+
+.month-field input:focus-visible {
+  outline: 3px solid #dbeafe;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+.month-search .btn {
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .month-field {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .month-field input {
+    width: 100%;
+  }
 }
 </style>

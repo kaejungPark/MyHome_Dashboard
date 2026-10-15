@@ -35,6 +35,9 @@ public class RecurringExpenseService {
     @Transactional(readOnly = true)
     public PageResponse<RecurringExpenseResponse> getRecurringExpense(
             Long userId,
+            String title,
+            Long categoryId,
+            Boolean active,
             int page,
             int size
     ) {
@@ -42,11 +45,23 @@ public class RecurringExpenseService {
         // 페이지와 페이지 크기를 검증한다.
         PageValidator.validate(page, size);
 
+        // 카테고리 미선택은 전체 조회이며, 선택한 ID는 양수여야 한다.
+        if (categoryId != null && categoryId <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "올바른 카테고리를 선택해 주세요."
+            );
+        }
+
+        // 검색어 앞뒤 공백을 제거한다. 빈 문자열이면 전체 항목을 조회한다.
+        String searchTitle = title == null ? "" : title.trim();
+
+
         // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
         long offset = PageUtils.calculateOffset(page, size);
 
         // 목록과 동일한 조건으로 전체 지출 수를 조회한다.
-        long totalCount = recurringExpenseMapper.countAll(userId);
+        long totalCount = recurringExpenseMapper.countAll(userId, searchTitle, categoryId, active);
 
         // 나머지가 있으면 마지막 페이지를 하나 추가한다.
         long totalPages = PageUtils.calculateTotalPages(totalCount, size);
@@ -54,7 +69,7 @@ public class RecurringExpenseService {
         // 조회 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
         List<RecurringExpenseResponse> items = offset >= totalCount
                 ? List.of()
-                : recurringExpenseMapper.findPage(userId, offset, size);
+                : recurringExpenseMapper.findPage(userId, searchTitle, categoryId, active, offset, size);
 
         return new PageResponse<>(
                 items,

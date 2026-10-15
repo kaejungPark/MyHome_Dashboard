@@ -31,10 +31,20 @@ public class ExpenseController {
     @GetMapping
     public ApiResponse<PageResponse<ExpenseResponse>> getExpenses(
             @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "") String title,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(defaultValue = "") String expenseType,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ApiResponse.success(expenseService.getExpenses(loginUser.getId(), page, size));
+        return ApiResponse.success(expenseService.getExpenses(
+                loginUser.getId(),
+                title,
+                categoryId,
+                expenseType,
+                page,
+                size
+        ));
     }
 
     /**

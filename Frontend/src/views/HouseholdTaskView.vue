@@ -2,8 +2,11 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { ListChecks, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
+import { ListChecks, Plus, Pencil, Trash2, List } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
+import type { PageResponse } from '../types/page'
+import { paginateDemo } from '../mocks/paginateDemo'
+import Pagination from '../components/Pagination.vue'
 
 type TaskType = 'CHORE' | 'CONSUMABLE'
 
@@ -25,6 +28,48 @@ interface HouseholdTaskHistory {
   createdDt: string
 }
 
+// 비로그인 체험 상태에서만 사용한다.
+const isDemo = ref(false)
+const { canModify } = useDemoGuard(isDemo)
+
+// 폼 입력값을 화면과 동기화한다.
+const form = reactive(initialForm())
+
+const completion = reactive(completionForm())
+const completingTask = ref<HouseholdTask | null>(null) // 완료 처리할 항목
+const historyTask = ref<HouseholdTask | null>(null) // 이력을 조회하는 항목
+const historyLoading = ref(false) // 완료 이력 조회 중 여부
+const HouseholdTasks = ref<HouseholdTask[]>([])
+const HouseholdTaskHistorys = ref<HouseholdTaskHistory[]>([])
+// 관리 목록 페이징
+const page = ref(1)
+const size = ref(5)
+const totalCount = ref(0)
+const totalPages = ref(0)
+// 관리 목록 검색 조건
+const searchName = ref('')
+const searchTaskType = ref<'' | TaskType>('')
+const searchActive = ref<'' | boolean>('')
+// 선택한 항목의 완료 이력 페이징
+const historyPage = ref(1)
+const historySize = ref(5)
+const historyTotalCount = ref(0)
+const historyTotalPages = ref(0)
+const loading = ref(false) // 조회 중 여부
+const saving = ref(false) // 저장·삭제 처리 중 여부
+const editingId = ref<number | null>(null) // null이면 신규 등록
+const errorMessage = ref('') // 오류 메시지
+const notice = ref('') // 처리 완료 메시지
+
+const baseUrl = '/api/household-tasks'
+
+// 검색 버튼으로 적용한 조건을 페이지 이동에도 유지한다.
+const appliedFilters = reactive({
+  name: '',
+  taskType: '' as '' | TaskType,
+  active: '' as '' | boolean,
+})
+
 function initialForm() {
   return {
     name: '',
@@ -43,27 +88,6 @@ function completionForm() {
     memo: '',
   }
 }
-
-// 비로그인 체험 상태에서만 사용한다.
-const isDemo = ref(false)
-const { canModify } = useDemoGuard(isDemo)
-
-// 폼 입력값을 화면과 동기화한다.
-const form = reactive(initialForm())
-
-const completion = reactive(completionForm())
-const completingTask = ref<HouseholdTask | null>(null) // 완료 처리할 항목
-const historyTask = ref<HouseholdTask | null>(null) // 이력을 조회하는 항목
-const historyLoading = ref(false) // 완료 이력 조회 중 여부
-const HouseholdTasks = ref<HouseholdTask[]>([])
-const HouseholdTaskHistorys = ref<HouseholdTaskHistory[]>([])
-const loading = ref(false) // 조회 중 여부
-const saving = ref(false) // 저장·삭제 처리 중 여부
-const editingId = ref<number | null>(null) // null이면 신규 등록
-const errorMessage = ref('') // 오류 메시지
-const notice = ref('') // 처리 완료 메시지
-
-const baseUrl = '/api/household-tasks'
 
 // 한국 시간을 기준으로 오늘 날짜를 반환한다.
 function todayText(): string {
@@ -195,6 +219,10 @@ async function deleteTask(task: HouseholdTask) {
     if (historyTask.value?.id === task.id) {
       historyTask.value = null
       HouseholdTaskHistorys.value = []
+
+      historyPage.value = 1
+      historyTotalCount.value = 0
+      historyTotalPages.value = 0
     }
 
     notice.value = '삭제했습니다.'
@@ -232,24 +260,57 @@ function cancelComplete() {
   Object.assign(completion, completionForm())
 }
 
-// 선택한 항목의 완료 이력만 조회
+// 선택한 항목의 완료 이력을 페이지 단위로 조회한다.
 async function loadHistory(task: HouseholdTask) {
   if (historyLoading.value) return
 
   historyLoading.value = true
   historyTask.value = task
   HouseholdTaskHistorys.value = []
+  historyTotalCount.value = 0
+  historyTotalPages.value = 0
   errorMessage.value = ''
 
   try {
-    if (isDemo.value) {
-      HouseholdTaskHistorys.value = createDemoData().householdTaskHistories.filter(
-        (history) => history.taskId === task.id,
+    async function fetchHistoryPage(
+      targetPage: number,
+    ): Promise<PageResponse<HouseholdTaskHistory>> {
+      if (isDemo.value) {
+        const histories = createDemoData()
+          .householdTaskHistories.filter((history) => history.taskId === task.id)
+          .sort((a, b) => b.completedDate.localeCompare(a.completedDate) || b.id - a.id)
+
+        return paginateDemo(histories, targetPage, historySize.value)
+      }
+
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        size: String(historySize.value),
+      })
+
+      const result = await request<PageResponse<HouseholdTaskHistory>>(
+        `${baseUrl}/${task.id}/completions?${params.toString()}`,
       )
-    } else {
-      HouseholdTaskHistorys.value =
-        (await request<HouseholdTaskHistory[]>(`${baseUrl}/${task.id}/completions`)) ?? []
+
+      if (!result) {
+        throw new Error('완료 이력 조회 결과가 없습니다.')
+      }
+
+      return result
     }
+
+    let result = await fetchHistoryPage(historyPage.value)
+    const lastPage = Math.max(1, result.totalPages)
+
+    if (historyPage.value > lastPage) {
+      historyPage.value = lastPage
+      result = await fetchHistoryPage(lastPage)
+    }
+
+    HouseholdTaskHistorys.value = result.items
+    historyPage.value = result.page
+    historyTotalCount.value = result.totalCount
+    historyTotalPages.value = result.totalPages
   } catch (error: unknown) {
     showError(error)
   } finally {
@@ -257,18 +318,34 @@ async function loadHistory(task: HouseholdTask) {
   }
 }
 
-// 목록의 완료 이력 버튼에서 호출한다.
-function showHistory(task: HouseholdTask) {
+// 다른 항목의 이력을 열 때는 첫 페이지부터 조회한다.
+async function showHistory(task: HouseholdTask) {
   if (loading.value || saving.value || historyLoading.value) return
-  return loadHistory(task)
+
+  historyPage.value = 1
+  await loadHistory(task)
 }
 
-// 완료 이력 영역을 닫는다.
+// 완료 이력 영역과 페이지 정보를 초기화한다.
 function closeHistory() {
-  if (historyLoading.value || saving.value) return
+  if (loading.value || saving.value || historyLoading.value) return
 
   historyTask.value = null
   HouseholdTaskHistorys.value = []
+  historyPage.value = 1
+  historyTotalCount.value = 0
+  historyTotalPages.value = 0
+}
+
+// 관리 목록 페이지와 독립적으로 완료 이력 페이지를 이동한다.
+async function changeHistoryPage(targetPage: number) {
+  if (loading.value || saving.value || historyLoading.value) return
+  if (!historyTask.value) return
+  if (targetPage < 1 || targetPage > historyTotalPages.value) return
+  if (targetPage === historyPage.value) return
+
+  historyPage.value = targetPage
+  await loadHistory(historyTask.value)
 }
 
 // 완료일과 메모를 저장하고 다음 예정일과 열린 이력을 갱신한다.
@@ -312,8 +389,9 @@ async function completeTask() {
 
     await loadData()
 
-    // 목록 갱신에 성공했고 해당 이력이 열려 있다면 함께 갱신한다.
+    // 완료 처리 후에는 이력 첫 페이지를 다시 조회한다.
     if (!errorMessage.value && historyTask.value?.id === task.id) {
+      historyPage.value = 1
       await loadHistory(task)
     }
   } catch (error: unknown) {
@@ -323,23 +401,108 @@ async function completeTask() {
   }
 }
 
-// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 목록을 표시한다.
+// 목록을 변경하기 전에 진행 중인 수정·완료 입력을 정리한다.
+function prepareListChange(): boolean {
+  if (editingId.value !== null || completingTask.value !== null) {
+    if (!window.confirm('작성 중인 내용을 취소하고 목록을 조회할까요?')) {
+      return false
+    }
+
+    resetForm()
+    cancelComplete()
+  }
+
+  closeHistory()
+  notice.value = ''
+  return true
+}
+
+// 입력한 검색 조건을 적용하고 첫 페이지를 조회한다.
+async function searchTasks() {
+  if (loading.value || saving.value || historyLoading.value) return
+  if (!prepareListChange()) return
+
+  Object.assign(appliedFilters, {
+    name: searchName.value.trim(),
+    taskType: searchTaskType.value,
+    active: searchActive.value,
+  })
+
+  page.value = 1
+  await loadData()
+}
+
+// 적용된 검색 조건을 유지하면서 관리 목록 페이지를 이동한다.
+async function changePage(targetPage: number) {
+  if (loading.value || saving.value || historyLoading.value) return
+  if (targetPage < 1 || targetPage > totalPages.value) return
+  if (targetPage === page.value) return
+  if (!prepareListChange()) return
+
+  page.value = targetPage
+  await loadData()
+}
+
+// 검색 조건에 맞는 집안일·소모품 목록을 페이지 단위로 조회한다.
 async function loadData() {
   if (loading.value) return
 
   loading.value = true
   errorMessage.value = ''
   HouseholdTasks.value = []
-  isDemo.value = false
+  totalCount.value = 0
+  totalPages.value = 0
 
   try {
     const demo = createDemoData()
+    const { name, taskType, active } = appliedFilters
 
-    const [result] = await Promise.all([
-      requestWithDemo<HouseholdTask[]>(baseUrl, () => demo.householdTasks),
-    ])
+    // 실제 조회와 체험 조회에 동일한 검색 조건을 적용한다.
+    function fetchPage(targetPage: number) {
+      const params = new URLSearchParams({
+        name,
+        taskType,
+        page: String(targetPage),
+        size: String(size.value),
+      })
 
-    HouseholdTasks.value = result.data
+      if (active !== '') {
+        params.set('active', String(active))
+      }
+
+      return requestWithDemo<PageResponse<HouseholdTask>>(`${baseUrl}?${params.toString()}`, () => {
+        const filtered = demo.householdTasks
+          .filter(
+            (task) =>
+              task.name.toLowerCase().includes(name.toLowerCase()) &&
+              (taskType === '' || task.taskType === taskType) &&
+              (active === '' || task.active === active),
+          )
+          .sort(
+            (a, b) =>
+              Number(b.active) - Number(a.active) ||
+              a.nextDueDate.localeCompare(b.nextDueDate) ||
+              b.id - a.id,
+          )
+
+        return paginateDemo(filtered, targetPage, size.value)
+      })
+    }
+
+    let result = await fetchPage(page.value)
+
+    // 삭제 등으로 현재 페이지가 사라졌다면 마지막 페이지를 조회한다.
+    const lastPage = Math.max(1, result.data.totalPages)
+
+    if (page.value > lastPage) {
+      page.value = lastPage
+      result = await fetchPage(lastPage)
+    }
+
+    HouseholdTasks.value = result.data.items
+    page.value = result.data.page
+    totalCount.value = result.data.totalCount
+    totalPages.value = result.data.totalPages
     isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)
@@ -476,17 +639,46 @@ onMounted(loadData)
         <div class="heading-title">
           <List :size="20" aria-hidden="true" />
           <h2>관리 목록</h2>
-          <span v-if="!loading" class="count-badge"> {{ HouseholdTasks.length }}건 </span>
+          <span v-if="!loading" class="count-badge"> {{ totalCount }}건 </span>
         </div>
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading || saving || historyLoading"
-          @click="loadData"
-        >
-          <RefreshCw :size="16" aria-hidden="true" />
-          새로고침
-        </button>
+        <!-- 항목명·관리 유형·사용 상태를 기준으로 검색한다. -->
+        <form class="task-search" @submit.prevent="searchTasks">
+          <label class="search-field">
+            <span>항목명</span>
+            <input
+              v-model="searchName"
+              type="search"
+              placeholder="항목명 입력"
+              :disabled="loading || saving || historyLoading"
+            />
+          </label>
+
+          <label class="search-field status-field">
+            <span>유형</span>
+            <select v-model="searchTaskType" :disabled="loading || saving || historyLoading">
+              <option value="">전체</option>
+              <option value="CHORE">집안일</option>
+              <option value="CONSUMABLE">소모품</option>
+            </select>
+          </label>
+
+          <label class="search-field status-field">
+            <span>상태</span>
+            <select v-model="searchActive" :disabled="loading || saving || historyLoading">
+              <option value="">전체</option>
+              <option :value="true">사용 중</option>
+              <option :value="false">비활성</option>
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="loading || saving || historyLoading"
+          >
+            검색
+          </button>
+        </form>
       </div>
 
       <p class="section-description">
@@ -496,7 +688,7 @@ onMounted(loadData)
 
       <p v-if="loading" class="empty-state" role="status">목록을 불러오는 중입니다.</p>
       <p v-else-if="!HouseholdTasks.length" class="empty-state">
-        {{ errorMessage ? '목록을 표시할 수 없습니다.' : '등록된 항목이 없습니다.' }}
+        {{ errorMessage ? '목록을 표시할 수 없습니다.' : '조회된 항목이 없습니다.' }}
       </p>
 
       <div v-else class="table-wrap">
@@ -594,6 +786,12 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <Pagination
+        :page="page"
+        :total-pages="totalPages"
+        :disabled="loading || saving || historyLoading"
+        @change="changePage"
+      />
     </section>
 
     <!-- 선택한 항목의 실제 완료일과 메모를 입력한다. -->
@@ -652,6 +850,7 @@ onMounted(loadData)
         <div class="heading-title">
           <List :size="20" aria-hidden="true" />
           <h2>{{ historyTask.name }} · 완료 이력</h2>
+          <span v-if="!historyLoading" class="count-badge"> {{ historyTotalCount }}건 </span>
         </div>
         <button
           type="button"
@@ -687,6 +886,12 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <Pagination
+        :page="historyPage"
+        :total-pages="historyTotalPages"
+        :disabled="loading || saving || historyLoading"
+        @change="changeHistoryPage"
+      />
     </section>
   </div>
 </template>
@@ -777,6 +982,63 @@ onMounted(loadData)
   overflow-wrap: anywhere;
 }
 
+/* 관리 목록 검색 조건을 오른쪽에 배치한다. */
+.task-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.task-search .search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.task-search input,
+.task-search select {
+  box-sizing: border-box;
+  width: 180px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #1e293b;
+  font: inherit;
+  font-weight: 400;
+}
+
+.task-search .status-field select {
+  width: 120px;
+}
+
+.task-search input:focus-visible,
+.task-search select:focus-visible {
+  outline: 3px solid #dbeafe;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+.task-search input:disabled,
+.task-search select:disabled {
+  background-color: #f8fafc;
+  cursor: not-allowed;
+}
+
+.task-search .btn {
+  min-height: 44px;
+}
+
 @media (max-width: 640px) {
   .household-page .heading-title h2 {
     overflow-wrap: anywhere;
@@ -784,6 +1046,21 @@ onMounted(loadData)
 
   .household-page .form-actions .btn {
     flex: 1;
+  }
+  .task-search {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-search label {
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr);
+  }
+
+  .task-search input,
+  .task-search select,
+  .task-search button {
+    width: 100%;
   }
 }
 </style>

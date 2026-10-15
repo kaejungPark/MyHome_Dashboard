@@ -22,10 +22,20 @@ public class RecurringExpenseController {
     @GetMapping
     public ApiResponse<PageResponse<RecurringExpenseResponse>> getRecurringExpense(
             @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(defaultValue = "") String title,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Boolean active,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        return ApiResponse.success(recurringExpenseService.getRecurringExpense(loginUser.getId(), page, size));
+        return ApiResponse.success(recurringExpenseService.getRecurringExpense(
+                loginUser.getId(),
+                title,
+                categoryId,
+                active,
+                page,
+                size
+        ));
     }
 
     /**

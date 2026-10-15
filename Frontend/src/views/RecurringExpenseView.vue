@@ -2,8 +2,11 @@
 import { onMounted, reactive, ref } from 'vue'
 import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
-import { Repeat, Plus, Pencil, Trash2, RefreshCw, List } from '@lucide/vue'
+import { Repeat, Plus, Pencil, Trash2, List } from '@lucide/vue'
 import { useDemoGuard } from '../composables/useDemoGuard'
+import type { PageResponse } from '../types/page'
+import { paginateDemo } from '../mocks/paginateDemo'
+import Pagination from '../components/Pagination.vue'
 
 // 카테고리 선택 목록이다.
 interface Category {
@@ -48,7 +51,7 @@ const { canModify } = useDemoGuard(isDemo)
 interface MonthlyPayment {
   month: string // 조회 월: YYYY-MM
   totalAmount: number // 해당 월의 납부 예정 금액 합계
-  items: MonthlyPaymentItem[] // 해당 월에 적용되는 활성 항목 목록
+  items: PageResponse<MonthlyPaymentItem> // 해당 월에 적용되는 활성 항목 목록
 }
 
 // API 주소와 화면에서 사용하는 데이터를 관리한다.
@@ -56,12 +59,29 @@ const baseUrl = '/api/recurring-expenses' // 고정 지출 API 공통 주소
 const categories = ref<Category[]>([]) // 카테고리 선택 목록
 const expenses = ref<RecurringExpense[]>([]) // 활성·비활성을 포함한 관리 목록
 const monthly = ref<MonthlyPayment | null>(null) // 월별 예정 목록과 합계
+const page = ref(1)
+const size = ref(5)
+const monthlyPage = ref(1) // 월별 납부 목록은 관리 목록과 페이지를 별도로 관리한다.
+const monthlySize = ref(5)
+const totalCount = ref(0)
+const totalPages = ref(0)
+const searchTitle = ref('')
+const searchCategoryId = ref<number | ''>('') // 빈 문자열이면 전체 카테고리를 조회한다.
+const searchActive = ref<boolean | ''>('') // 빈 문자열: 전체, true: 사용 중, false: 비활성
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
 const saving = ref(false) // 조회·등록·수정·삭제·납부 처리 중 중복 실행을 막는다.
 const loading = ref(false) // 관리 목록과 카테고리 조회가 성공하면 true가 된다.
 const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
 const paymentDates = reactive<Record<number, string>>({}) // 항목별로 입력한 실제 납부일을 보관한다.
+
+// 검색 버튼으로 확정한 조건이다.
+// 입력값만 바꾼 뒤 페이지를 이동해도 기존 검색 조건을 유지한다.
+const appliedFilters = reactive({
+  title: '',
+  categoryId: '' as number | '',
+  active: '' as boolean | '',
+})
 
 // 사용자 기기의 오늘 날짜를 YYYY-MM-DD 형식으로 반환한다.
 function todayDate() {
@@ -107,52 +127,177 @@ function resetForm() {
   Object.assign(form, initialForm())
 }
 
-// 관리 목록과 카테고리를 갱신한다.
-// 조회 실패 시 이전 목록으로 작업하지 못하도록 준비 상태를 해제한다.
+// 적용된 검색 조건으로 카테고리와 관리 목록을 갱신한다.
 async function refreshManagement() {
   loading.value = false
-  categories.value = []
   expenses.value = []
-  isDemo.value = false
+  totalCount.value = 0
+  totalPages.value = 0
 
+  const filters = { ...appliedFilters }
+  const currentPage = page.value
+  const pageSize = size.value
   const demo = createDemoData()
+
+  const params = new URLSearchParams({
+    title: filters.title,
+    page: String(currentPage),
+    size: String(pageSize),
+  })
+
+  if (filters.categoryId !== '') {
+    params.set('categoryId', String(filters.categoryId))
+  }
+
+  if (filters.active !== '') {
+    params.set('active', String(filters.active))
+  }
 
   const [categoryResult, expenseResult] = await Promise.all([
     requestWithDemo<Category[]>('/api/categories', () => demo.categories),
-    requestWithDemo<RecurringExpense[]>(baseUrl, () => demo.recurringExpenses),
+    requestWithDemo<PageResponse<RecurringExpense>>(`${baseUrl}?${params.toString()}`, () => {
+      const filtered = demo.recurringExpenses
+        .filter(
+          (item) =>
+            (!filters.title || item.title.toLowerCase().includes(filters.title.toLowerCase())) &&
+            (filters.categoryId === '' || item.categoryId === filters.categoryId) &&
+            (filters.active === '' || item.active === filters.active),
+        )
+        .sort((a, b) => a.paymentDay - b.paymentDay || a.id - b.id)
+
+      return paginateDemo(filtered, currentPage, pageSize)
+    }),
   ])
 
   categories.value = categoryResult.data
-  expenses.value = expenseResult.data
-  isDemo.value = categoryResult.isDemo || expenseResult.isDemo
+  isDemo.value = isDemo.value || categoryResult.isDemo || expenseResult.isDemo
 
-  // 이 화면의 loading은 조회 중이 아니라 목록 준비 완료 여부다.
+  const result = expenseResult.data
+
+  // 삭제 등으로 현재 페이지가 사라졌으면 마지막 유효 페이지를 조회한다.
+  const lastPage = Math.max(1, result.totalPages)
+  if (currentPage > lastPage) {
+    page.value = lastPage
+    await refreshManagement()
+    return
+  }
+
+  expenses.value = result.items
+  page.value = result.page
+  size.value = result.size
+  totalCount.value = result.totalCount
+  totalPages.value = result.totalPages
   loading.value = true
 }
 
-// 선택한 월의 예정 목록을 갱신한다.
-// 실제 날짜와 합계는 백엔드 계산 결과를 사용한다.
+// 검색 조건을 확정하고 첫 페이지부터 조회한다.
+async function searchExpenses() {
+  if (saving.value) return
+
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 검색할까요?')) {
+    return
+  }
+
+  if (editingId.value !== null) resetForm()
+
+  Object.assign(appliedFilters, {
+    title: searchTitle.value.trim(),
+    categoryId: searchCategoryId.value,
+    active: searchActive.value,
+  })
+
+  page.value = 1
+  saving.value = true
+  errorMessage.value = ''
+  notice.value = ''
+
+  try {
+    await refreshManagement()
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 적용된 검색 조건을 유지하면서 관리 목록의 페이지를 이동한다.
+async function changePage(targetPage: number) {
+  if (saving.value) return
+  if (targetPage < 1 || targetPage > totalPages.value) return
+  if (targetPage === page.value) return
+
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
+    return
+  }
+
+  if (editingId.value !== null) resetForm()
+
+  page.value = targetPage
+  saving.value = true
+  errorMessage.value = ''
+  notice.value = ''
+
+  try {
+    await refreshManagement()
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 선택한 월의 납부 목록을 페이지 단위로 조회한다.
 async function refreshMonthly() {
+  const month = selectedMonth.value
+  const currentPage = monthlyPage.value
+  const pageSize = monthlySize.value
+
   monthly.value = null
 
-  // 이전 조회에서 입력한 납부일이 다른 월의 항목에 남지 않도록 초기화한다.
   Object.keys(paymentDates).forEach((id) => {
     delete paymentDates[Number(id)]
   })
 
-  if (!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(selectedMonth.value)) {
+  if (!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(month)) {
     throw new Error('조회할 월을 선택해 주세요.')
   }
 
+  const year = Number(month.slice(0, 4))
+  if (year < 1 || year > 9998) {
+    throw new Error('지원하지 않는 연도입니다.')
+  }
+
   const result = await requestWithDemo<MonthlyPayment>(
-    `${baseUrl}/monthly/${selectedMonth.value}`,
-    () => createDemoData(selectedMonth.value).monthlyPayment,
+    `${baseUrl}/monthly/${month}?page=${currentPage}&size=${pageSize}`,
+    () => {
+      const sample = createDemoData(month).monthlyPayment
+
+      const sorted = [...sample.items].sort(
+        (a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.id - b.id,
+      )
+
+      return {
+        month: sample.month,
+        totalAmount: sample.totalAmount,
+        items: paginateDemo(sorted, currentPage, pageSize),
+      }
+    },
   )
 
-  monthly.value = result.data
-
-  // 관리 목록 또는 월별 목록이 샘플이면 체험 상태를 유지한다.
   isDemo.value = isDemo.value || result.isDemo
+
+  const resultPage = result.data.items
+  const lastPage = Math.max(1, resultPage.totalPages)
+
+  if (currentPage > lastPage) {
+    monthlyPage.value = lastPage
+    await refreshMonthly()
+    return
+  }
+
+  monthly.value = result.data
+  monthlyPage.value = resultPage.page
+  monthlySize.value = resultPage.size
 }
 
 // 납부 완료는 POST, 취소는 DELETE로 처리한다.
@@ -213,6 +358,7 @@ async function loadData() {
   if (saving.value) return
 
   saving.value = true
+  isDemo.value = false
   errorMessage.value = ''
   notice.value = ''
   monthly.value = null
@@ -231,6 +377,29 @@ async function loadData() {
 async function loadMonthly() {
   if (saving.value) return
 
+  // 조회 월을 변경하면 첫 페이지부터 표시한다.
+  monthlyPage.value = 1
+
+  saving.value = true
+  errorMessage.value = ''
+  notice.value = ''
+
+  try {
+    await refreshMonthly()
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    saving.value = false
+  }
+}
+
+// 현재 월을 유지하면서 납부 목록의 페이지를 이동한다.
+async function changeMonthlyPage(targetPage: number) {
+  if (saving.value || !monthly.value) return
+  if (targetPage < 1 || targetPage > monthly.value.items.totalPages) return
+  if (targetPage === monthlyPage.value) return
+
+  monthlyPage.value = targetPage
   saving.value = true
   errorMessage.value = ''
   notice.value = ''
@@ -489,13 +658,42 @@ onMounted(loadData)
         <div class="heading-title">
           <List :size="20" aria-hidden="true" />
           <h2 id="recurring-list-heading">고정 지출 목록</h2>
-          <span v-if="loading" class="count-badge">{{ expenses.length }}건</span>
+          <span v-if="loading" class="count-badge">{{ totalCount }}건</span>
         </div>
 
-        <button type="button" class="btn btn-secondary" :disabled="saving" @click="loadData">
-          <RefreshCw :size="16" aria-hidden="true" />
-          새로고침
-        </button>
+        <!-- 관리 목록에만 카테고리·항목명·상태 조건을 적용한다. -->
+        <form class="recurring-search" @submit.prevent="searchExpenses">
+          <label>
+            카테고리
+            <select v-model="searchCategoryId" :disabled="saving">
+              <option value="">전체</option>
+              <option v-for="category in categories" :key="category.id" :value="category.id">
+                {{ category.name }}
+              </option>
+            </select>
+          </label>
+
+          <label>
+            항목명
+            <input
+              v-model="searchTitle"
+              type="search"
+              placeholder="항목명 입력"
+              :disabled="saving"
+            />
+          </label>
+
+          <label>
+            상태
+            <select v-model="searchActive" :disabled="saving">
+              <option value="">전체</option>
+              <option :value="true">사용 중</option>
+              <option :value="false">비활성</option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn btn-primary" :disabled="saving">검색</button>
+        </form>
       </div>
 
       <p v-if="saving" class="empty-state" role="status">처리 중입니다.</p>
@@ -564,6 +762,7 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <Pagination :page="page" :total-pages="totalPages" :disabled="saving" @change="changePage" />
     </section>
 
     <section class="card" aria-labelledby="monthly-heading">
@@ -571,7 +770,7 @@ onMounted(loadData)
         <div class="heading-title">
           <Repeat :size="20" aria-hidden="true" />
           <h2 id="monthly-heading">월별 납부 현황</h2>
-          <span v-if="monthly" class="count-badge"> {{ monthly.items.length }}건 </span>
+          <span v-if="monthly" class="count-badge"> {{ monthly.items.totalCount }}건 </span>
         </div>
       </div>
 
@@ -602,7 +801,7 @@ onMounted(loadData)
           <strong>{{ money(monthly.totalAmount) }}</strong>
         </div>
 
-        <p v-if="monthly.items.length === 0" class="empty-state">
+        <p v-if="monthly.items.items.length === 0" class="empty-state">
           해당 월의 납부 예정 항목이 없습니다.
         </p>
 
@@ -627,7 +826,7 @@ onMounted(loadData)
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in monthly.items" :key="item.id">
+              <tr v-for="item in monthly.items.items" :key="item.id">
                 <td class="date-cell">{{ item.paymentDate }}</td>
                 <td class="title-cell">{{ item.title }}</td>
                 <td>
@@ -674,6 +873,12 @@ onMounted(loadData)
             </tbody>
           </table>
         </div>
+        <Pagination
+          :page="monthlyPage"
+          :total-pages="monthly.items.totalPages"
+          :disabled="saving"
+          @change="changeMonthlyPage"
+        />
       </template>
 
       <p v-else class="empty-state">
@@ -758,5 +963,81 @@ onMounted(loadData)
   background: #eaf1ff;
   color: #2563eb;
   font-size: 14px;
+}
+
+/* 관리 목록 검색 조건을 오른쪽에 한 줄로 배치한다. */
+.recurring-search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.recurring-search label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.recurring-search input,
+.recurring-search select {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #1e293b;
+  font: inherit;
+  font-weight: 400;
+}
+
+.recurring-search input {
+  width: 200px;
+}
+
+.recurring-search select {
+  width: 130px;
+}
+
+.recurring-search input:focus-visible,
+.recurring-search select:focus-visible {
+  outline: 3px solid #dbeafe;
+  outline-offset: 1px;
+  border-color: #2563eb;
+}
+
+.recurring-search input:disabled,
+.recurring-search select:disabled {
+  background-color: #f8fafc;
+}
+
+.recurring-search .btn {
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .recurring-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recurring-search label {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+  }
+
+  .recurring-search input,
+  .recurring-search select {
+    width: 100%;
+  }
 }
 </style>

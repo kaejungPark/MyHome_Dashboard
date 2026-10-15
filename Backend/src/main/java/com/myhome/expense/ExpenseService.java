@@ -36,17 +36,34 @@ public class ExpenseService {
     @Transactional(readOnly = true)
     public PageResponse<ExpenseResponse> getExpenses(
             Long userId,
+            String title,
+            Long categoryId,
+            String expenseType,
             int page,
             int size
     ) {
         // 페이지 번호와 페이지 크기를 검증한다.
         PageValidator.validate(page, size);
 
+        // 검색어 앞뒤 공백을 제거한다. 빈 문자열이면 전체 항목을 조회한다.
+        String searchTitle = title == null ? "" : title.trim();
+
+        // 미선택이면 전체 장소를 조회한다.
+        String searchType = expenseType == null ? "" : expenseType.trim();
+
+        // 예외 처리
+        if (!searchType.isEmpty() && !searchType.matches("FIXED|VARIABLE")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "올바른 지출 유형를 선택해 주세요."
+            );
+        }
+
         // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
         long offset = PageUtils.calculateOffset(page, size);
 
         // 목록과 동일한 조건으로 전체 지출 수를 조회한다.
-        long totalCount = expenseMapper.countAll(userId);
+        long totalCount = expenseMapper.countAll(userId, searchTitle, categoryId, searchType);
 
         // 나머지가 있으면 마지막 페이지를 하나 추가한다.
         long totalPages = PageUtils.calculateTotalPages(totalCount, size);
@@ -54,7 +71,7 @@ public class ExpenseService {
         // 조회 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
         List<ExpenseResponse> items = offset >= totalCount
                 ? List.of()
-                : expenseMapper.findPage(userId, offset, size);
+                : expenseMapper.findPage(userId, searchTitle, categoryId, searchType, offset, size);
 
         return new PageResponse<>(
                 items,
