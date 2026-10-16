@@ -7,6 +7,8 @@ import { useDemoGuard } from '../composables/useDemoGuard'
 import type { PageResponse } from '../types/page'
 import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
+import { usePagination } from '../composables/usePagination'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 // 카테고리 선택 목록이다.
 interface Category {
@@ -43,15 +45,11 @@ interface MonthlyPaymentItem {
   paidDate: string | null // 실제 납부일
 }
 
-// 비로그인 체험 상태에서만 사용한다.
-const isDemo = ref(false)
-const { canModify } = useDemoGuard(isDemo)
-
 // 월별 납부 예정 목록과 합계다.
 interface MonthlyPayment {
   month: string // 조회 월: YYYY-MM
-  totalAmount: number // 해당 월의 납부 예정 금액 합계
-  items: PageResponse<MonthlyPaymentItem> // 해당 월에 적용되는 활성 항목 목록
+  totalAmount: number // 현재 페이지가 아닌 해당 월 전체의 납부 예정 금액 합계
+  items: PageResponse<MonthlyPaymentItem> // 해당 월의 납부 대상과 납부 이력을 포함한 페이징 목록
 }
 
 // API 주소와 화면에서 사용하는 데이터를 관리한다.
@@ -59,29 +57,57 @@ const baseUrl = '/api/recurring-expenses' // 고정 지출 API 공통 주소
 const categories = ref<Category[]>([]) // 카테고리 선택 목록
 const expenses = ref<RecurringExpense[]>([]) // 활성·비활성을 포함한 관리 목록
 const monthly = ref<MonthlyPayment | null>(null) // 월별 예정 목록과 합계
-const page = ref(1)
-const size = ref(5)
-const monthlyPage = ref(1) // 월별 납부 목록은 관리 목록과 페이지를 별도로 관리한다.
-const monthlySize = ref(5)
-const totalCount = ref(0)
-const totalPages = ref(0)
-const searchTitle = ref('')
+const searchTitle = ref('') // 항목명 입력 변수
 const searchCategoryId = ref<number | ''>('') // 빈 문자열이면 전체 카테고리를 조회한다.
 const searchActive = ref<boolean | ''>('') // 빈 문자열: 전체, true: 사용 중, false: 비활성
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
 const saving = ref(false) // 조회·등록·수정·삭제·납부 처리 중 중복 실행을 막는다.
 const loading = ref(false) // 관리 목록과 카테고리 조회가 성공하면 true가 된다.
-const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
 const paymentDates = reactive<Record<number, string>>({}) // 항목별로 입력한 실제 납부일을 보관한다.
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
-// 검색 버튼으로 확정한 조건이다.
-// 입력값만 바꾼 뒤 페이지를 이동해도 기존 검색 조건을 유지한다.
+const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
+const { canModify } = useDemoGuard(isDemo) // canModify는 체험 상태에서 등록·수정 저장·삭제 요청을 진행하지 않도록 안내
+
+// 관리 목록의 페이지 상태와 공통 처리 함수를 사용
+const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
+  usePagination(5)
+
+/**
+ * 월별 납부 목록의 페이지 상태를 생성
+ * 관리 목록과 별도로 관리하므로 한쪽의 페이지 이동이 다른 목록에 영향을 주지 않는다.
+ */
+const {
+  page: monthlyPage,
+  size: monthlySize,
+  totalCount: monthlyTotalCount,
+  totalPages: monthlyTotalPages,
+  resetPage: resetMonthlyPage,
+  resetTotals: resetMonthlyTotals,
+  applyPage: applyMonthlyPage,
+  canMoveTo: canMoveMonthlyPage,
+} = usePagination(5)
+
+/**
+ * 마지막으로 검색 버튼을 눌렀을 때의 조건을 저장
+ * 페이지 이동이나 저장·삭제 후 재조회할 때도 이 조건을 사용
+ * 검색창을 수정만 하고 조회하지 않은 값이 페이지 이동에 반영되는 것을 방지
+ */
 const appliedFilters = reactive({
   title: '',
   categoryId: '' as number | '',
   active: '' as boolean | '',
 })
+
+// 납부 예정 현황을 조회할 월이다. 처음에는 현재 월을 선택한다.
+const selectedMonth = ref(currentMonth())
+
+/**
+ * 등록과 수정에서 함께 사용하는 반응형 입력 객체
+ * 초기화할 때는 객체를 교체하지 않고 Object.assign으로 속성값을 갱신
+ */
+const form = reactive(initialForm())
 
 // 사용자 기기의 오늘 날짜를 YYYY-MM-DD 형식으로 반환한다.
 function todayDate() {
@@ -95,10 +121,9 @@ function currentMonth() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
-// 납부 예정 현황을 조회할 월이다. 처음에는 현재 월을 선택한다.
-const selectedMonth = ref(currentMonth())
-
-// 신규 등록 폼의 기본값이다.
+/**
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성
+ */
 function initialForm() {
   return {
     categoryId: '',
@@ -113,26 +138,25 @@ function initialForm() {
   }
 }
 
-// 등록·수정 폼의 입력값을 화면과 동기화한다.
-const form = reactive(initialForm())
-
-// 오류를 화면에 표시한다.
-function showError(error: unknown) {
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
-}
-
-// 수정 상태를 해제하고 신규 등록 폼으로 되돌린다.
+/**
+ * 수정 대상 ID를 해제하고 입력값을 신규 등록 상태로 초기화
+ * 기존 reactive 객체를 유지하면서 각 속성의 값만 변경
+ */
 function resetForm() {
   editingId.value = null
   Object.assign(form, initialForm())
 }
 
-// 적용된 검색 조건으로 카테고리와 관리 목록을 갱신한다.
+/**
+ * 적용된 검색 조건으로 카테고리와 고정 지출 관리 목록을 조회
+ * 체험 데이터에도 항목명·카테고리·사용 여부 조건을 적용한 뒤 페이징
+ * 삭제 등으로 현재 페이지가 사라지면 마지막 유효 페이지를 다시 조회
+ * 오류 처리는 이 함수를 호출한 검색·저장 등의 함수에서 담당
+ */
 async function refreshManagement() {
   loading.value = false
   expenses.value = []
-  totalCount.value = 0
-  totalPages.value = 0
+  resetTotals()
 
   const filters = { ...appliedFilters }
   const currentPage = page.value
@@ -182,15 +206,19 @@ async function refreshManagement() {
     return
   }
 
+  // 현재 페이지의 목록과 페이지 정보를 반영한다.
   expenses.value = result.items
-  page.value = result.page
-  size.value = result.size
-  totalCount.value = result.totalCount
-  totalPages.value = result.totalPages
+  applyPage(result)
+
+  // 이 화면의 loading은 조회 완료 여부를 의미한다.
   loading.value = true
 }
 
-// 검색 조건을 확정하고 첫 페이지부터 조회한다.
+/**
+ * 검색창의 입력값을 실제 조회 조건으로 확정한다.
+ * 수정 중이면 취소 여부를 확인하고, 새로운 조건의 첫 페이지를 조회한다.
+ * 관리 목록의 검색 조건만 변경하며 월별 납부 목록은 유지한다.
+ */
 async function searchExpenses() {
   if (saving.value) return
 
@@ -206,7 +234,7 @@ async function searchExpenses() {
     active: searchActive.value,
   })
 
-  page.value = 1
+  resetPage()
   saving.value = true
   errorMessage.value = ''
   notice.value = ''
@@ -220,11 +248,14 @@ async function searchExpenses() {
   }
 }
 
-// 적용된 검색 조건을 유지하면서 관리 목록의 페이지를 이동한다.
+/**
+ * 적용된 검색 조건을 유지하면서 관리 목록의 페이지를 이동한다.
+ * 수정 중인 경우 취소 여부를 확인한 뒤 목록을 갱신한다.
+ * 월별 납부 목록의 페이지 번호는 변경하지 않는다.
+ */
 async function changePage(targetPage: number) {
   if (saving.value) return
-  if (targetPage < 1 || targetPage > totalPages.value) return
-  if (targetPage === page.value) return
+  if (!canMoveTo(targetPage)) return
 
   if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
     return
@@ -252,8 +283,18 @@ async function refreshMonthly() {
   const currentPage = monthlyPage.value
   const pageSize = monthlySize.value
 
+  // 이전 월의 목록과 합계를 비우고 페이지 건수를 초기화한다.
   monthly.value = null
 
+  /**
+   * 선택한 월의 납부 목록과 월 전체 예정 금액을 조회한다.
+   * 페이지 이동은 납부 항목 목록에만 적용하며 월 전체 합계는 유지한다.
+   * 재조회할 때 이전에 입력한 실제 납부일을 초기화한다.
+   * 현재 페이지가 사라졌으면 마지막 유효 페이지를 다시 조회한다.
+   */
+  resetMonthlyTotals()
+
+  // 이전 월이나 페이지에서 입력한 실제 납부일을 초기화한다.
   Object.keys(paymentDates).forEach((id) => {
     delete paymentDates[Number(id)]
   })
@@ -270,6 +311,8 @@ async function refreshMonthly() {
   const result = await requestWithDemo<MonthlyPayment>(
     `${baseUrl}/monthly/${month}?page=${currentPage}&size=${pageSize}`,
     () => {
+      // 선택한 월의 체험 데이터를 생성한다.
+      // 합계는 월 전체 값을 사용하고, 정렬된 납부 목록만 페이지 단위로 나눈다.
       const sample = createDemoData(month).monthlyPayment
 
       const sorted = [...sample.items].sort(
@@ -286,7 +329,7 @@ async function refreshMonthly() {
 
   isDemo.value = isDemo.value || result.isDemo
 
-  const resultPage = result.data.items
+  const resultPage = result.data.items // PageResponse
   const lastPage = Math.max(1, resultPage.totalPages)
 
   if (currentPage > lastPage) {
@@ -295,12 +338,16 @@ async function refreshMonthly() {
     return
   }
 
-  monthly.value = result.data
-  monthlyPage.value = resultPage.page
-  monthlySize.value = resultPage.size
+  monthly.value = result.data // 조회 월, 월별 합계, 페이징 응답
+  applyMonthlyPage(resultPage)
 }
 
-// 납부 완료는 POST, 취소는 DELETE로 처리한다.
+/**
+ * 미납 항목은 POST로 납부 완료하고, 납부한 항목은 DELETE로 납부를 취소한다.
+ * 처리 대상 월은 선택창이 아닌 현재 표시된 응답의 month를 사용한다.
+ * 납부 완료 시 연결된 생활비가 생성되고, 취소 시 함께 삭제된다.
+ * 처리 성공 후 월별 목록을 다시 조회해 납부 상태와 실제 납부일을 갱신한다.
+ */
 async function changePayment(item: MonthlyPaymentItem) {
   if (saving.value || !monthly.value) return
   if (!canModify()) return
@@ -353,7 +400,11 @@ async function changePayment(item: MonthlyPaymentItem) {
   }
 }
 
-// 최초 진입과 전체 새로고침 시 관리 목록과 예정 목록을 조회한다.
+/**
+ * 최초 진입 또는 전체 새로고침 시 관리 목록과 월별 납부 목록을 순서대로 조회한다.
+ * 체험 상태를 초기화한 뒤 각 조회 결과에 체험 데이터가 포함되었는지 반영한다.
+ * 전체 조회가 끝날 때까지 saving으로 중복 실행을 막는다.
+ */
 async function loadData() {
   if (saving.value) return
 
@@ -373,12 +424,15 @@ async function loadData() {
   }
 }
 
-// 월을 변경할 때는 예정 목록만 다시 조회한다.
+/**
+ * 조회 월이 변경되면 월별 납부 목록을 첫 페이지부터 조회한다.
+ * 관리 목록의 검색 조건과 페이지 번호는 유지한다.
+ */
 async function loadMonthly() {
   if (saving.value) return
 
   // 조회 월을 변경하면 첫 페이지부터 표시한다.
-  monthlyPage.value = 1
+  resetMonthlyPage()
 
   saving.value = true
   errorMessage.value = ''
@@ -393,11 +447,14 @@ async function loadMonthly() {
   }
 }
 
-// 현재 월을 유지하면서 납부 목록의 페이지를 이동한다.
+/**
+ * 선택한 월을 유지하면서 납부 목록의 페이지를 이동한다.
+ * 첫 페이지로 초기화하는 loadMonthly를 호출하지 않고
+ * refreshMonthly를 호출하여 목표 페이지를 조회한다.
+ */
 async function changeMonthlyPage(targetPage: number) {
   if (saving.value || !monthly.value) return
-  if (targetPage < 1 || targetPage > monthly.value.items.totalPages) return
-  if (targetPage === monthlyPage.value) return
+  if (!canMoveMonthlyPage(targetPage)) return
 
   monthlyPage.value = targetPage
   saving.value = true
@@ -413,7 +470,11 @@ async function changeMonthlyPage(targetPage: number) {
   }
 }
 
-// 선택한 항목을 수정 폼에 채운다.
+/**
+ * 선택한 고정 지출을 수정 대상으로 지정하고 입력 폼에 복사한다.
+ * 숫자 필드는 폼에서 사용하는 문자열로 변환하고 null은 빈 문자열로 표시한다.
+ * 값을 채운 뒤 화면 상단의 입력 영역으로 이동한다.
+ */
 function startEdit(expense: RecurringExpense) {
   if (saving.value) return
 
@@ -436,7 +497,12 @@ function startEdit(expense: RecurringExpense) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// 등록은 POST, 수정은 PUT으로 같은 형식의 JSON을 전송한다.
+/**
+ * 필수 항목과 금액·납부일·적용 기간을 검증한 뒤 등록 또는 수정한다.
+ * 수정 대상 ID가 없으면 POST, 있으면 PUT으로 요청한다.
+ * 저장 성공 후 폼을 초기화하고 관리 목록과 월별 납부 목록을 모두 갱신한다.
+ * 금액·적용 기간·사용 여부 변경이 월별 조회 결과에도 영향을 줄 수 있다.
+ */
 async function saveExpense() {
   if (saving.value || !loading.value) return
   if (!canModify()) return
@@ -502,7 +568,11 @@ async function saveExpense() {
   }
 }
 
-// 확인을 받은 뒤 선택한 고정 지출 설정을 삭제한다.
+/**
+ * 사용자 확인 후 선택한 고정 지출 설정의 삭제를 요청한다.
+ * 삭제 가능 여부와 접근 권한은 서버에서 최종 검증한다.
+ * 삭제된 항목이 수정 대상이면 폼을 초기화하고 두 목록을 다시 조회한다.
+ */
 async function deleteExpense(expense: RecurringExpense) {
   if (saving.value || !loading.value) return
   if (!canModify()) return
@@ -770,7 +840,7 @@ onMounted(loadData)
         <div class="heading-title">
           <Repeat :size="20" aria-hidden="true" />
           <h2 id="monthly-heading">월별 납부 현황</h2>
-          <span v-if="monthly" class="count-badge"> {{ monthly.items.totalCount }}건 </span>
+          <span v-if="monthly" class="count-badge"> {{ monthlyTotalCount }}건 </span>
         </div>
       </div>
 
@@ -875,7 +945,7 @@ onMounted(loadData)
         </div>
         <Pagination
           :page="monthlyPage"
-          :total-pages="monthly.items.totalPages"
+          :total-pages="monthlyTotalPages"
           :disabled="saving"
           @change="changeMonthlyPage"
         />

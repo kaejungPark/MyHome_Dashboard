@@ -4,6 +4,7 @@ import { request, ApiError } from '../api/client'
 import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import { MessageSquare } from '@lucide/vue'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 interface CommunityDetailResponse {
   id: number
@@ -28,8 +29,9 @@ const details = ref<CommunityDetailResponse | null>(null)
 const loginUserId = ref<number | null>(null) // 버튼 표시 판단에 필요한 로그인 사용자 ID.
 const authError = ref('')
 
+const { errorMessage, showError } = useErrorMessage('게시글 조회 중 오류가 발생했습니다.') // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
+
 const loading = ref(false)
-const errorMessage = ref('') // 오류 메시지
 const baseUrl = '/api/community'
 
 const deleting = ref(false) // 삭제 중 중복 요청 방지
@@ -55,12 +57,6 @@ const isOwner = computed(
 const canReport = computed(
   () => loginUserId.value !== null && details.value !== null && !isOwner.value && !authError.value,
 )
-
-// 발생한 오류를 화면에 표시할 메시지로 변환한다.
-function showError(error: unknown) {
-  errorMessage.value =
-    error instanceof Error ? error.message : '게시글 조회 중 오류가 발생했습니다.'
-}
 
 // 새 신고를 시작할 때 이전 입력과 안내를 초기화한다.
 function openReport() {

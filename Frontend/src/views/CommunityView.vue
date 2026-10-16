@@ -3,6 +3,9 @@ import { onMounted, ref } from 'vue'
 import { request } from '../api/client'
 import type { PageResponse } from '../types/page'
 import { MessageSquare, Search } from '@lucide/vue'
+import { usePagination } from '../composables/usePagination'
+import Pagination from '../components/Pagination.vue'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 interface Community {
   id: number // 커뮤니티 ID
@@ -17,7 +20,7 @@ type SearchType = 'TITLE' | 'NICKNAME'
 
 const communities = ref<Community[]>([])
 const loading = ref(false)
-const errorMessage = ref('')
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
 // 검색창에서 사용자가 선택·입력 중인 값이다.
 const searchType = ref<SearchType>('TITLE')
@@ -29,50 +32,54 @@ const appliedSearchType = ref<SearchType>('TITLE')
 const appliedKeyword = ref('')
 
 // 현재 페이지와 페이지당 개수, 서버에서 반환한 전체 개수·페이지 수를 관리한다.
-const page = ref(1)
-const size = ref(5)
-const totalCount = ref(0)
-const totalPages = ref(0)
+const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
+  usePagination(5)
 
 const baseUrl = '/api/community'
 
-// 오류를 개발자 도구에 기록하고 화면에 안내 메시지를 표시한다.
-function showError(error: unknown) {
-  console.error(error)
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
-}
-
 /**
- * 검색 버튼으로 확정한 조건과 현재 페이지로 게시글을 조회한다.
- * 조회 실패 시 이전 결과가 남지 않도록 목록과 페이지 정보를 먼저 초기화한다.
- * 커뮤니티는 비로그인 사용자도 실제 게시글을 조회하므로 체험 데이터를 사용하지 않는다.
+ * 확정된 검색 조건으로 게시글 목록을 조회한다.
+ * 커뮤니티는 실제 게시글을 조회하므로 체험 데이터를 사용하지 않는다.
+ * 삭제·숨김 등으로 현재 페이지가 사라지면 마지막 유효 페이지를 다시 조회한다.
  */
 async function refreshCommunity() {
   communities.value = []
-  totalCount.value = 0
-  totalPages.value = 0
+  resetTotals()
 
-  // 한글·공백·특수문자가 포함된 검색어도 안전하게 URL로 변환한다.
-  const params = new URLSearchParams({
-    page: String(page.value),
-    size: String(size.value),
-    searchType: appliedSearchType.value,
-    keyword: appliedKeyword.value,
-  })
+  // 재조회에서도 동일한 검색 조건과 페이지 크기를 사용한다.
+  const currentSearchType = appliedSearchType.value
+  const currentKeyword = appliedKeyword.value
+  const pageSize = size.value
 
-  // 게시글 목록과 페이징 정보를 하나의 응답으로 받는다.
-  const result = await request<PageResponse<Community>>(`${baseUrl}?${params.toString()}`)
+  async function fetchCommunityPage(targetPage: number): Promise<PageResponse<Community>> {
+    const params = new URLSearchParams({
+      page: String(targetPage),
+      size: String(pageSize),
+      searchType: currentSearchType,
+      keyword: currentKeyword,
+    })
 
-  if (result === null) {
-    throw new Error('게시글 목록 응답이 없습니다.')
+    const result = await request<PageResponse<Community>>(`${baseUrl}?${params.toString()}`)
+
+    if (result === null) {
+      throw new Error('게시글 목록 응답이 없습니다.')
+    }
+
+    return result
   }
 
-  // 목록과 페이지 정보를 갱신한다.
+  let result = await fetchCommunityPage(page.value)
+
+  // 결과가 없더라도 요청 페이지 번호는 최소 1로 유지한다.
+  const lastPage = Math.max(1, result.totalPages)
+
+  if (page.value > lastPage) {
+    page.value = lastPage
+    result = await fetchCommunityPage(lastPage)
+  }
+
   communities.value = result.items
-  page.value = result.page
-  size.value = result.size
-  totalCount.value = result.totalCount
-  totalPages.value = result.totalPages
+  applyPage(result)
 }
 
 // 새 검색은 항상 1페이지부터 조회한다.
@@ -81,7 +88,7 @@ async function searchCommunity() {
 
   appliedSearchType.value = searchType.value
   appliedKeyword.value = keyword.value.trim()
-  page.value = 1
+  resetPage()
 
   await loadData()
 }
@@ -105,8 +112,7 @@ function formatCreatedDate(value: string): string {
 // 적용된 검색 조건을 유지하면서 페이지를 이동한다.
 async function changePage(targetPage: number) {
   if (loading.value) return
-  if (targetPage < 1 || targetPage > totalPages.value) return
-  if (targetPage === page.value) return
+  if (!canMoveTo(targetPage)) return
 
   page.value = targetPage
   await loadData()
@@ -200,7 +206,7 @@ onMounted(loadData)
       <div v-else class="table-wrap">
         <table class="data-table community-table">
           <caption class="sr-only">
-            게시글 제목, 작성자, 조회ㅣ수, 작성일
+            게시글 제목, 작성자, 조회수, 작성일
           </caption>
 
           <thead>
@@ -232,30 +238,8 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
-      <!-- 결과가 있을 때만 페이지 이동 영역을 표시한다. -->
-      <nav v-if="totalPages > 0" class="community-pagination" aria-label="게시글 페이지 이동">
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading || page <= 1"
-          @click="changePage(page - 1)"
-        >
-          이전
-        </button>
-
-        <span class="page-indicator" aria-live="polite">
-          {{ page }} / {{ totalPages }} 페이지
-        </span>
-
-        <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading || page >= totalPages"
-          @click="changePage(page + 1)"
-        >
-          다음
-        </button>
-      </nav>
+      <!-- 공통 페이지 버튼으로 게시글 목록의 페이지를 이동한다. -->
+      <Pagination :page="page" :total-pages="totalPages" :disabled="loading" @change="changePage" />
     </section>
   </section>
 </template>
@@ -318,23 +302,6 @@ onMounted(loadData)
 
 .community-table .post-date-cell {
   white-space: nowrap;
-}
-
-/* 테이블 아래 중앙에 페이지 이동 영역을 배치한다. */
-.community-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  width: 100%;
-  margin-top: 24px;
-}
-
-.page-indicator {
-  color: #64748b;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
 }
 
 .post-title-link {

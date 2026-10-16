@@ -7,6 +7,8 @@ import { useDemoGuard } from '../composables/useDemoGuard'
 import type { PageResponse } from '../types/page'
 import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
+import { usePagination } from '../composables/usePagination'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 type IngredientStorageLocation = 'REFRIGERATOR' | 'FREEZER' | 'PANTRY' // 식재료 보관 장소 상태값
 type IngredientStatus = 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태값
@@ -15,53 +17,52 @@ type SearchStatus = '' | 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태�
 
 // 식재료 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Ingredient {
-  id: number
-  name: string
-  quantity: number
-  unit: string
-  storageLocation: IngredientStorageLocation
-  purchaseDate: string | null
-  expirationDate: string | null
-  status: IngredientStatus
-  memo: string | null
+  id: number // 식재료 ID
+  name: string // 식재료명
+  quantity: number // 수량. 소수점
+  unit: string // 단위
+  storageLocation: IngredientStorageLocation // 보관 장소
+  purchaseDate: string | null // 구매일
+  expirationDate: string | null // 소비기한
+  status: IngredientStatus // 관리 상태
+  memo: string | null // 메모
 }
 
-// 비로그인 체험 상태에서만 사용한다.
-const isDemo = ref(false)
-const { canModify } = useDemoGuard(isDemo)
-
-const Ingredients = ref<Ingredient[]>([])
-const page = ref(1)
-const size = ref(5)
-const totalCount = ref(0)
-const totalPages = ref(0)
-const searchKeyword = ref('')
-const searchLocations = ref<SearchLocation>('')
-const searchStatus = ref<SearchStatus>('')
+const Ingredients = ref<Ingredient[]>([]) // 조회한 식재료 목록
+const searchKeyword = ref('') // 검색창에 입력 식재료명
+const searchLocations = ref<SearchLocation>('') // 검색창에 선택되는 보관장소
+const searchStatus = ref<SearchStatus>('') // 검색창에 선택되는 상태
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
-const editingId = ref<number | null>(null) // null이면 신규 등록
-const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
+const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
 const baseUrl = '/api/ingredients'
 
-// 선택 입력은 빈 문자열로 초기화하고, 저장할 때 null로 변환한다.
-function initialForm() {
-  return {
-    name: '',
-    quantity: 0,
-    unit: '',
-    storageLocation: 'REFRIGERATOR' as IngredientStorageLocation,
-    purchaseDate: '',
-    expirationDate: '',
-    status: 'STORED' as IngredientStatus,
-    memo: '',
-  }
-}
+// 식재료 목록의 페이지 상태와 공통 처리 함수를 사용
+const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
+  usePagination(5)
 
-// 폼 입력값을 화면과 동기화한다.
+/**
+ * 마지막으로 검색 버튼을 눌렀을 때의 조건을 저장
+ * 페이지 이동이나 저장·삭제 후 재조회할 때도 이 조건을 사용
+ * 검색창을 수정만 하고 조회하지 않은 값이 페이지 이동에 반영되는 것을 방지
+ */
+const appliedFilters = reactive({
+  keyword: '',
+  storageLocation: '' as SearchLocation,
+  status: '' as SearchStatus,
+})
+
+/**
+ * 등록과 수정에서 함께 사용하는 반응형 입력 객체
+ * 초기화할 때는 객체를 교체하지 않고 Object.assign으로 속성값을 갱신
+ */
 const form = reactive(initialForm())
+
+const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
+const { canModify } = useDemoGuard(isDemo) // canModify는 체험 상태에서 등록·수정 저장·삭제 요청을 진행하지 않도록 안내
 
 // 한국 기준 오늘의 연·월·일을 구하고, 날짜 비교용 UTC 자정 값으로 변환한다.
 const getToday = (): number => {
@@ -77,6 +78,20 @@ const getToday = (): number => {
   const day = Number(parts.find((part) => part.type === 'day')!.value)
 
   return Date.UTC(year, month - 1, day)
+}
+
+// 선택 입력은 빈 문자열로 초기화하고, 저장할 때 null로 변환한다.
+function initialForm() {
+  return {
+    name: '',
+    quantity: 0,
+    unit: '',
+    storageLocation: 'REFRIGERATOR' as IngredientStorageLocation,
+    purchaseDate: '',
+    expirationDate: '',
+    status: 'STORED' as IngredientStatus,
+    memo: '',
+  }
 }
 
 // 보관 장소 코드를 화면에 표시할 한글 명칭으로 변환한다.
@@ -107,82 +122,64 @@ function statusLabel(status: IngredientStatus): string {
   }
 }
 
-// 오류를 개발자 도구에 기록하고 화면에 안내 메시지를 표시한다.
-function showError(error: unknown) {
-  console.error(error)
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
+// 소비기한과 한국 기준 오늘을 모두 UTC 자정 값으로 비교해 남은 일수를 계산한다.
+const calculateRemainingDays = (expiryDateString: string | null): number | null => {
+  if (!expiryDateString) return null
+
+  const expiry = new Date(`${expiryDateString}T00:00:00Z`).getTime()
+  if (!Number.isFinite(expiry)) return null
+
+  return Math.round((expiry - getToday()) / (1000 * 60 * 60 * 24))
+}
+
+// 남은 일수에 따라 문구와 스타일 클래스를 결정
+const getExpiryStatus = (status: IngredientStatus, expiryDateString: string | null) => {
+  // 보관 중(STORED)이 아니거나(소비 완료·폐기) 소비기한이 없는 경우
+  if (status !== 'STORED' || !expiryDateString) {
+    return { text: '', className: 'text-gray-400' }
+  }
+
+  const diffDays = calculateRemainingDays(expiryDateString)
+
+  if (diffDays === null) {
+    return { text: '', className: 'text-gray-400' }
+  } else if (diffDays < 0) {
+    return { text: '기한 경과', className: 'text-red-500 font-semibold' }
+  } else if (diffDays === 0) {
+    return { text: '오늘까지', className: 'text-red-500 font-semibold' }
+  } else if (diffDays >= 1 && diffDays <= 3) {
+    return { text: `${diffDays}일 남음 · 임박`, className: 'text-orange-500 font-semibold' }
+  } else {
+    return { text: `${diffDays}일 남음`, className: 'text-gray-600' }
+  }
 }
 
 // 다시 조회할 때는 첫 페이지부터 표시한다.
 async function searchIngredients() {
   if (loading.value || saving.value) return
 
-  page.value = 1
-  await loadData()
-}
-
-// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 목록을 표시한다.
-async function loadData() {
-  if (loading.value) return
-
-  loading.value = true
-  errorMessage.value = ''
-  Ingredients.value = []
-  totalCount.value = 0
-  totalPages.value = 0
-  isDemo.value = false
-
-  try {
-    const keyword = searchKeyword.value.trim()
-    const storageLocation = searchLocations.value
-    const status = searchStatus.value
-    const currentPage = page.value
-    const pageSize = size.value
-
-    // 검색어의 공백과 특수문자를 안전하게 URL에 포함한다.
-    const params = new URLSearchParams({
-      keyword,
-      storageLocation,
-      status,
-      page: String(currentPage),
-      size: String(pageSize),
-    })
-
-    const result = await requestWithDemo<PageResponse<Ingredient>>(
-      `${baseUrl}?${params.toString()}`,
-      () => {
-        const demo = createDemoData()
-
-        const filtered = demo.ingredients.filter(
-          (ingredients) =>
-            (!keyword || ingredients.name.toLowerCase().includes(keyword.toLowerCase())) &&
-            (!storageLocation || ingredients.storageLocation === storageLocation) &&
-            (!status || ingredients.status === status),
-        )
-
-        // 샘플의 기존 배열 순서를 유지하며 페이지를 나눈다.
-        return paginateDemo(filtered, currentPage, pageSize)
-      },
-    )
-
-    Ingredients.value = result.data.items
-    page.value = result.data.page
-    size.value = result.data.size
-    totalCount.value = result.data.totalCount
-    totalPages.value = result.data.totalPages
-    isDemo.value = result.isDemo
-  } catch (error: unknown) {
-    showError(error)
-  } finally {
-    loading.value = false
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 검색할까요?')) {
+    return
   }
+
+  if (editingId.value !== null) resetForm()
+
+  // 식재료명의 앞뒤 공백을 제거하고, 현재 입력값을 적용된 검색 조건에 복사
+  Object.assign(appliedFilters, {
+    keyword: searchKeyword.value.trim(),
+    storageLocation: searchLocations.value,
+    status: searchStatus.value,
+  })
+
+  resetPage() // 새로운 검색은 첫 페이지부터 시작하고 이전 처리 완료 안내
+  notice.value = ''
+  await loadData() // 확정한 검색 조건으로 식재료 목록을 조회한다.
 }
 
 // 선택한 페이지의 식재료 목록을 다시 조회한다.
 async function changePage(targetPage: number) {
   if (loading.value || saving.value) return
-  if (targetPage < 1 || targetPage > totalPages.value) return
-  if (targetPage === page.value) return
+  if (!canMoveTo(targetPage)) return
 
   if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
     return
@@ -193,21 +190,22 @@ async function changePage(targetPage: number) {
   }
 
   notice.value = ''
-  page.value = targetPage
+  page.value = targetPage // 목표 페이지를 설정한 뒤 기존 검색 조건으로 목록을 다시 조회
   await loadData()
 }
-
-// 수정 상태를 해제하고 신규 등록 폼으로 되돌린다.
+/**
+ * 수정 대상 ID를 해제하고 입력값을 신규 등록 상태로 초기화
+ * 기존 reactive 객체를 유지하면서 각 속성의 값만 변경
+ */
 function resetForm() {
   editingId.value = null
   Object.assign(form, initialForm())
 }
 
-// 선택한 식재료를 수정 폼에 채운다.
+/**
+ * 선택한 식재료를 수정 대상으로 지정하고 기존 값을 입력 폼에 복사
+ */
 function startEdit(item: Ingredient) {
-  if (saving.value || loading.value) return
-  if (!canModify()) return
-
   editingId.value = item.id
   errorMessage.value = ''
   notice.value = ''
@@ -227,7 +225,12 @@ function startEdit(item: Ingredient) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// 신규 등록은 POST, 기존 식재료 수정은 PUT으로 저장한다.
+/**
+ * 필수 입력과 수량·보관 장소·상태를 검증한 뒤 식재료를 등록하거나 수정
+ * editingId가 없으면 POST로 등록하고, 있으면 해당 ID에 PUT으로 수정
+ * 저장 성공 후 입력 폼을 초기화하고 적용된 검색 조건으로 목록을 다시 조회
+ * 저장 요청이 실패하면 입력값을 유지
+ */
 async function saveIngredient() {
   if (saving.value || loading.value) return
   if (!canModify()) return
@@ -280,6 +283,7 @@ async function saveIngredient() {
     await request<null>(id === null ? baseUrl : `${baseUrl}/${id}`, {
       method: id === null ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      // 서버 요청 타입에 맞게 숫자를 변환하고 문자열의 앞뒤 공백을 제거, 선택 입력인 구매일·소비기한·메모는 비어 있으면 null로 전달
       body: JSON.stringify({
         name,
         quantity,
@@ -292,12 +296,9 @@ async function saveIngredient() {
       }),
     })
 
-    // 저장 성공 후 수정 상태를 해제하고 최신 목록을 조회한다.
-    editingId.value = null
-    Object.assign(form, initialForm())
-    notice.value = id === null ? '식재료가 등록됐습니다.' : '식재료가 수정됐습니다.'
-
-    await loadData()
+    resetForm() // 저장 성공 후 폼을 초기화하고 최신 목록을 조회한다.
+    notice.value = id === null ? '등록됐습니다.' : '수정됐습니다.'
+    await loadData() // 저장된 내용과 검색 결과의 건수·페이지 변화를 반영하기 위해
   } catch (error: unknown) {
     // 저장 요청이 실패하면 입력 내용을 유지한다.
     showError(error)
@@ -306,7 +307,12 @@ async function saveIngredient() {
   }
 }
 
-// 본인 식재료를 삭제하고 목록을 갱신한다.
+/**
+ * 사용자 확인 후 선택한 식재료를 삭제
+ * 조회·저장 중에는 중복 요청을 막고, 체험 상태에서는 삭제를 진행하지 않는다.
+ * 삭제 성공 후 수정 대상과 목록을 갱신
+ * 삭제로 현재 페이지가 사라지는 경우는 loadData에서 보정
+ */
 async function deleteIngredient(item: Ingredient) {
   if (saving.value || loading.value) return
   if (!canModify()) return
@@ -330,35 +336,72 @@ async function deleteIngredient(item: Ingredient) {
   }
 }
 
-// 소비기한과 한국 기준 오늘을 모두 UTC 자정 값으로 비교해 남은 일수를 계산한다.
-const calculateRemainingDays = (expiryDateString: string | null): number | null => {
-  if (!expiryDateString) return null
+/**
+ * 검색 조건에 맞는 식재료 목록을 조회
+ * 비로그인 유저는 requestWithDemo의 체험 데이터로 대체
+ * 실제 목록과 체험 목록 모두 PageResponse 형식으로 처리
+ * 삭제 등으로 현재 페이지가 사라지면 마지막 유효 페이지를 다시 조회
+ */
+async function loadData() {
+  // 진행 중인 목록 조회가 있으면 중복 요청을 막는다.
+  // 저장·삭제 처리 내부에서도 재조회하므로 saving 상태로는 차단하지 않는다.
+  if (loading.value) return
 
-  const expiry = new Date(`${expiryDateString}T00:00:00Z`).getTime()
-  if (!Number.isFinite(expiry)) return null
+  loading.value = true // 이전 목록과 건수를 비우고 로딩 상태로 전환, 현재 페이지 번호와 적용된 검색 조건은 유지
+  errorMessage.value = ''
+  Ingredients.value = []
+  resetTotals()
 
-  return Math.round((expiry - getToday()) / (1000 * 60 * 60 * 24))
-}
+  try {
+    const filters = { ...appliedFilters } // 이번 조회에 사용할 조건과 페이지 크기를 복사, 마지막 페이지 보정으로 재요청하더라도 같은 조건을 사용
+    const pageSize = size.value
 
-// 남은 일수에 따라 문구와 스타일 클래스를 결정
-const getExpiryStatus = (status: IngredientStatus, expiryDateString: string | null) => {
-  // 보관 중(STORED)이 아니거나(소비 완료·폐기) 소비기한이 없는 경우
-  if (status !== 'STORED' || !expiryDateString) {
-    return { text: '', className: 'text-gray-400' }
-  }
+    const demo = createDemoData() // 조회에서 사용할 체험 데이터를 생성, 실제 API 대신 체험 데이터를 반환할 때 아래 콜백에서 사용
 
-  const diffDays = calculateRemainingDays(expiryDateString)
+    // 지정한 페이지를 조회하는 내부 함수, 최초 조회와 마지막 페이지 보정에 같은 요청 구성을 재사용
+    const fetchIngredientPage = (targetPage: number) => {
+      const params = new URLSearchParams({
+        keyword: filters.keyword,
+        storageLocation: filters.storageLocation,
+        status: filters.status,
+        page: String(targetPage),
+        size: String(pageSize),
+      })
 
-  if (diffDays === null) {
-    return { text: '', className: 'text-gray-400' }
-  } else if (diffDays < 0) {
-    return { text: '기한 경과', className: 'text-red-500 font-semibold' }
-  } else if (diffDays === 0) {
-    return { text: '오늘까지', className: 'text-red-500 font-semibold' }
-  } else if (diffDays >= 1 && diffDays <= 3) {
-    return { text: `${diffDays}일 남음 · 임박`, className: 'text-orange-500 font-semibold' }
-  } else {
-    return { text: `${diffDays}일 남음`, className: 'text-gray-600' }
+      return requestWithDemo<PageResponse<Ingredient>>(`${baseUrl}?${params.toString()}`, () => {
+        /**
+         * 체험 목록에도 식재료명·보관장소·상태 유형 조건을 적용
+         * 식재료명은 대소문자를 구분하지 않는 포함 검색이며, 빈 조건은 전체로 처리
+         */
+        const filtered = demo.ingredients.filter(
+          (ingredients) =>
+            (!filters.keyword ||
+              ingredients.name.toLowerCase().includes(filters.keyword.toLowerCase())) &&
+            (!filters.storageLocation || ingredients.storageLocation === filters.storageLocation) &&
+            (!filters.status || ingredients.status === filters.status),
+        )
+
+        // 필터링한 전체 결과에서 요청한 페이지의 항목만 추출, 전체 건수와 페이지 수도 필터링된 결과를 기준으로 계산
+        return paginateDemo(filtered, targetPage, pageSize)
+      })
+    }
+
+    let result = await fetchIngredientPage(page.value)
+
+    const lastPage = Math.max(1, result.data.totalPages)
+
+    if (page.value > lastPage) {
+      page.value = lastPage
+      result = await fetchIngredientPage(lastPage)
+    }
+
+    Ingredients.value = result.data.items
+    applyPage(result.data)
+    isDemo.value = result.isDemo
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -503,7 +546,7 @@ onMounted(loadData)
           </label>
 
           <label class="search-field status-field">
-            상태
+            보관장소
             <select v-model="searchLocations" :disabled="loading || saving">
               <option value="">전체</option>
               <option value="REFRIGERATOR">냉장</option>
@@ -530,7 +573,7 @@ onMounted(loadData)
 
       <p v-if="loading" class="empty-state" role="status">식재료를 불러오는 중입니다.</p>
       <p v-else-if="errorMessage" class="list-warning">목록이 최신 상태가 아닐 수 있습니다.</p>
-      <p v-else-if="Ingredients.length === 0" class="empty-state">등록된 식재료가 없습니다.</p>
+      <p v-else-if="Ingredients.length === 0" class="empty-state">조회된 식재료가 없습니다.</p>
 
       <div v-if="!loading && Ingredients.length > 0" class="table-wrap">
         <table class="data-table ingredient-table">

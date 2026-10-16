@@ -7,6 +7,8 @@ import { useDemoGuard } from '../composables/useDemoGuard'
 import type { PageResponse } from '../types/page'
 import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
+import { usePagination } from '../composables/usePagination'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 type TaskType = 'CHORE' | 'CONSUMABLE'
 
@@ -41,25 +43,33 @@ const historyTask = ref<HouseholdTask | null>(null) // 이력을 조회하는 �
 const historyLoading = ref(false) // 완료 이력 조회 중 여부
 const HouseholdTasks = ref<HouseholdTask[]>([])
 const HouseholdTaskHistorys = ref<HouseholdTaskHistory[]>([])
-// 관리 목록 페이징
-const page = ref(1)
-const size = ref(5)
-const totalCount = ref(0)
-const totalPages = ref(0)
 // 관리 목록 검색 조건
 const searchName = ref('')
 const searchTaskType = ref<'' | TaskType>('')
 const searchActive = ref<'' | boolean>('')
-// 선택한 항목의 완료 이력 페이징
-const historyPage = ref(1)
-const historySize = ref(5)
-const historyTotalCount = ref(0)
-const historyTotalPages = ref(0)
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
 const editingId = ref<number | null>(null) // null이면 신규 등록
-const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
+
+// 관리 목록의 페이지 상태를 생성한다.
+// 검색 조건을 변경하면 첫 페이지로 이동하고, 조회 응답으로 페이지 정보를 갱신한다.
+const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
+  usePagination(5)
+
+// 완료 이력의 페이지 상태를 관리 목록과 독립적으로 생성한다.
+// 다른 항목의 이력을 열면 첫 페이지부터 조회한다.
+const {
+  page: historyPage,
+  size: historySize,
+  totalCount: historyTotalCount,
+  totalPages: historyTotalPages,
+  resetPage: resetHistoryPage,
+  resetTotals: resetHistoryTotals,
+  applyPage: applyHistoryPage,
+  canMoveTo: canMoveHistoryPage,
+} = usePagination(5)
 
 const baseUrl = '/api/household-tasks'
 
@@ -99,19 +109,17 @@ function todayText(): string {
   }).format(new Date())
 }
 
-// 오류를 개발자 도구에 기록하고 화면에 안내 메시지를 표시한다.
-function showError(error: unknown) {
-  console.error(error)
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
-}
-
 // 입력값과 수정 대상을 초기화한다.
 function resetForm() {
   editingId.value = null
   Object.assign(form, initialForm())
 }
 
-// 서버의 관리 유형을 화면에 표시할 명칭으로 변환한다.
+/**
+ * 항목명·반복 주기·다음 예정일·메모를 검증한 뒤 등록 또는 수정한다.
+ * 수정 대상 ID가 없으면 POST, 있으면 PUT으로 요청한다.
+ * 저장 성공 후 폼과 관리 목록을 갱신하고, 열린 이력 제목에도 변경된 항목명을 반영한다.
+ */
 function taskTypeLabel(taskType: TaskType): string {
   return taskType === 'CHORE' ? '집안일' : '소모품'
 }
@@ -127,12 +135,13 @@ async function saveTask() {
   const name = form.name.trim()
   const memo = form.memo.trim()
 
-  // 등록 수정 필수 validation 검증
+  // 항목명의 필수 입력 여부와 최대 길이를 검사한다.
   if (!name || name.length > 100) {
     errorMessage.value = '항목명은 1~100자로 입력해 주세요.'
     return
   }
 
+  // 반복 주기는 DB의 INT 범위 안에서 1 이상의 정수여야 한다.
   if (!Number.isInteger(form.cycleDays) || form.cycleDays < 1 || form.cycleDays > 2147483647) {
     errorMessage.value = '반복 주기는 1 이상의 정수로 입력해 주세요.'
     return
@@ -200,7 +209,11 @@ function startEdit(task: HouseholdTask) {
   })
 }
 
-// 삭제 가능 여부는 서버에서 완료 이력과 소유자를 기준으로 검사한다.
+/**
+ * 사용자 확인 후 선택한 집안일·소모품 항목의 삭제를 요청한다.
+ * 소유자와 완료 이력에 따른 삭제 가능 여부는 서버에서 검증한다.
+ * 삭제 성공 시 해당 항목의 수정·완료 입력·이력 상태를 정리하고 관리 목록을 갱신한다.
+ */
 async function deleteTask(task: HouseholdTask) {
   if (loading.value || saving.value || historyLoading.value) return
   if (!canModify()) return
@@ -220,9 +233,8 @@ async function deleteTask(task: HouseholdTask) {
       historyTask.value = null
       HouseholdTaskHistorys.value = []
 
-      historyPage.value = 1
-      historyTotalCount.value = 0
-      historyTotalPages.value = 0
+      resetHistoryPage()
+      resetHistoryTotals()
     }
 
     notice.value = '삭제했습니다.'
@@ -234,7 +246,10 @@ async function deleteTask(task: HouseholdTask) {
   }
 }
 
-// 선택한 항목의 완료 입력 영역 오픈
+/**
+ * 활성 항목의 완료 입력 영역을 연다.
+ * 기존 수정 상태를 해제하고 완료일은 한국 기준 오늘, 메모는 빈 값으로 초기화한다.
+ */
 function startComplete(task: HouseholdTask) {
   if (loading.value || saving.value || historyLoading.value) return
   if (!canModify()) return
@@ -260,15 +275,19 @@ function cancelComplete() {
   Object.assign(completion, completionForm())
 }
 
-// 선택한 항목의 완료 이력을 페이지 단위로 조회한다.
+/**
+ * 선택한 항목의 완료 이력을 페이지 단위로 조회한다.
+ * 체험 상태에서는 해당 taskId의 샘플 이력을 추리고, 로그인 상태에서는 API를 호출한다.
+ * 이력은 완료일 내림차순, 같은 완료일이면 ID 내림차순으로 표시한다.
+ * 관리 목록의 페이지 상태는 변경하지 않는다.
+ */
 async function loadHistory(task: HouseholdTask) {
   if (historyLoading.value) return
 
   historyLoading.value = true
   historyTask.value = task
   HouseholdTaskHistorys.value = []
-  historyTotalCount.value = 0
-  historyTotalPages.value = 0
+  resetHistoryTotals()
   errorMessage.value = ''
 
   try {
@@ -307,10 +326,9 @@ async function loadHistory(task: HouseholdTask) {
       result = await fetchHistoryPage(lastPage)
     }
 
+    // 선택한 항목의 이력과 이력 전용 페이지 정보를 반영한다.
     HouseholdTaskHistorys.value = result.items
-    historyPage.value = result.page
-    historyTotalCount.value = result.totalCount
-    historyTotalPages.value = result.totalPages
+    applyHistoryPage(result)
   } catch (error: unknown) {
     showError(error)
   } finally {
@@ -322,7 +340,7 @@ async function loadHistory(task: HouseholdTask) {
 async function showHistory(task: HouseholdTask) {
   if (loading.value || saving.value || historyLoading.value) return
 
-  historyPage.value = 1
+  resetHistoryPage()
   await loadHistory(task)
 }
 
@@ -332,23 +350,26 @@ function closeHistory() {
 
   historyTask.value = null
   HouseholdTaskHistorys.value = []
-  historyPage.value = 1
-  historyTotalCount.value = 0
-  historyTotalPages.value = 0
+  resetHistoryPage()
+  resetHistoryTotals()
 }
 
 // 관리 목록 페이지와 독립적으로 완료 이력 페이지를 이동한다.
 async function changeHistoryPage(targetPage: number) {
   if (loading.value || saving.value || historyLoading.value) return
   if (!historyTask.value) return
-  if (targetPage < 1 || targetPage > historyTotalPages.value) return
-  if (targetPage === historyPage.value) return
+  if (!canMoveHistoryPage(targetPage)) return
 
   historyPage.value = targetPage
   await loadHistory(historyTask.value)
 }
 
-// 완료일과 메모를 저장하고 다음 예정일과 열린 이력을 갱신한다.
+/**
+ * 실제 완료일과 메모를 검증한 뒤 완료 이력 등록을 요청한다.
+ * 완료일은 오늘 또는 과거 날짜만 허용하며, 중복 완료 여부는 서버에서 검증한다.
+ * 성공 후 관리 목록을 다시 조회해 서버에서 계산한 다음 예정일을 반영한다.
+ * 해당 항목의 이력이 열려 있으면 이력 첫 페이지도 다시 조회한다.
+ */
 async function completeTask() {
   if (loading.value || saving.value || historyLoading.value) return
   if (!canModify()) return
@@ -389,9 +410,9 @@ async function completeTask() {
 
     await loadData()
 
-    // 완료 처리 후에는 이력 첫 페이지를 다시 조회한다.
+    // 목록 갱신에 성공했고 해당 항목의 이력이 열려 있으면 첫 페이지를 다시 조회한다.
     if (!errorMessage.value && historyTask.value?.id === task.id) {
-      historyPage.value = 1
+      resetHistoryPage()
       await loadHistory(task)
     }
   } catch (error: unknown) {
@@ -401,7 +422,11 @@ async function completeTask() {
   }
 }
 
-// 목록을 변경하기 전에 진행 중인 수정·완료 입력을 정리한다.
+/**
+ * 검색이나 관리 목록 페이지 이동 전에 입력 상태를 정리한다.
+ * 수정 또는 완료 입력 중이면 취소 여부를 확인하고, 거절하면 목록 변경을 중단한다.
+ * 진행하면 입력을 초기화하고 열린 완료 이력과 이전 처리 안내를 닫는다.
+ */
 function prepareListChange(): boolean {
   if (editingId.value !== null || completingTask.value !== null) {
     if (!window.confirm('작성 중인 내용을 취소하고 목록을 조회할까요?')) {
@@ -417,7 +442,11 @@ function prepareListChange(): boolean {
   return true
 }
 
-// 입력한 검색 조건을 적용하고 첫 페이지를 조회한다.
+/**
+ * 입력한 항목명·유형·사용 상태를 실제 검색 조건으로 확정한다.
+ * 진행 중인 입력을 정리한 뒤 첫 페이지부터 조회한다.
+ * 빈 유형과 빈 사용 상태는 전체 조회를 의미한다.
+ */
 async function searchTasks() {
   if (loading.value || saving.value || historyLoading.value) return
   if (!prepareListChange()) return
@@ -428,30 +457,39 @@ async function searchTasks() {
     active: searchActive.value,
   })
 
-  page.value = 1
+  resetPage()
   await loadData()
 }
 
-// 적용된 검색 조건을 유지하면서 관리 목록 페이지를 이동한다.
+/**
+ * 적용된 검색 조건을 유지하면서 관리 목록의 페이지를 이동한다.
+ * 이동할 페이지를 검사한 뒤 수정·완료 입력의 취소 여부를 확인한다.
+ * 목록이 바뀌면 이전에 열었던 완료 이력은 닫는다.
+ */
 async function changePage(targetPage: number) {
   if (loading.value || saving.value || historyLoading.value) return
-  if (targetPage < 1 || targetPage > totalPages.value) return
-  if (targetPage === page.value) return
+  if (!canMoveTo(targetPage)) return
   if (!prepareListChange()) return
 
   page.value = targetPage
   await loadData()
 }
 
-// 검색 조건에 맞는 집안일·소모품 목록을 페이지 단위로 조회한다.
+/**
+ * 적용된 검색 조건으로 집안일·소모품 관리 목록을 조회한다.
+ * 체험 데이터에도 항목명·유형·사용 여부 조건을 적용한 뒤 페이징한다.
+ * 삭제나 수정으로 현재 페이지가 사라지면 마지막 유효 페이지를 다시 조회한다.
+ * 완료 이력은 이 함수에서 조회하지 않고 사용자가 선택한 항목만 별도로 조회한다.
+ */
 async function loadData() {
+  // 진행 중인 목록 조회가 있으면 중복 요청을 막는다.
+  // 저장·삭제·완료 처리 내부에서도 재조회하므로 saving 상태로는 차단하지 않는다.
   if (loading.value) return
 
   loading.value = true
   errorMessage.value = ''
   HouseholdTasks.value = []
-  totalCount.value = 0
-  totalPages.value = 0
+  resetTotals()
 
   try {
     const demo = createDemoData()
@@ -499,10 +537,9 @@ async function loadData() {
       result = await fetchPage(lastPage)
     }
 
+    // 현재 페이지의 목록과 페이지 정보를 각각 반영한다.
     HouseholdTasks.value = result.data.items
-    page.value = result.data.page
-    totalCount.value = result.data.totalCount
-    totalPages.value = result.data.totalPages
+    applyPage(result.data)
     isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)

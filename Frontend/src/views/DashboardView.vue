@@ -13,6 +13,7 @@ import {
 } from '@lucide/vue' // 대시보드 요약 카드에 사용할 아이콘
 import { requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 // 대시보드에 표시할 일정 요약
 interface DashboardSchedule {
@@ -55,15 +56,11 @@ interface DashboardResponse {
 // 화면에서 사용하는 데이터와 처리 상태다.
 const dashboard = ref<DashboardResponse | null>(null)
 const loading = ref(false)
-const errorMessage = ref('') // 오류 메시지
 
 // 비로그인 체험 상태에서만 사용한다.
 const isDemo = ref(false)
 
-// 발생한 오류를 화면에 표시할 메시지로 변환한다.
-function showError(error: unknown) {
-  errorMessage.value = error instanceof Error ? error.message : '통계 조회 중 오류가 발생했습니다.'
-}
+const { errorMessage, showError } = useErrorMessage('통계 조회 중 오류가 발생했습니다.') // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
 // 금액을 천 단위 쉼표로 표시한다.
 function formatAmount(amount: number | null) {

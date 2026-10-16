@@ -7,6 +7,8 @@ import { useDemoGuard } from '../composables/useDemoGuard'
 import type { PageResponse } from '../types/page'
 import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
+import { usePagination } from '../composables/usePagination'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 // 물품 상태에 사용
 type HomeItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
@@ -27,28 +29,47 @@ interface HomeItem {
   memo: string | null // 메모
 }
 
-// 비로그인 체험 상태에서만 사용한다.
-const isDemo = ref(false)
-const { canModify } = useDemoGuard(isDemo)
-
 // 조회 결과와 화면 처리 상태를 관리한다.
 const homeItems = ref<HomeItem[]>([])
-const page = ref(1)
-const size = ref(5)
-const totalCount = ref(0)
-const totalPages = ref(0)
-const searchName = ref('')
-const searchCategory = ref('')
-const searchStatus = ref<SearchStatus>('')
+const searchName = ref('') // 목록 조회용 물품명
+const searchCategory = ref('') // 목록 조회용 분류
+const searchStatus = ref<SearchStatus>('') // 조회용 물품 상태 조회
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
 const editingId = ref<number | null>(null) // null이면 신규 등록
-const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
+
+// 물품관리 목록의 페이지 상태와 공통 처리 함수를 사용
+const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
+  usePagination(5)
+
+/**
+ * 마지막으로 검색 버튼을 눌렀을 때의 조건을 저장
+ * 페이지 이동이나 저장·삭제 후 재조회할 때도 이 조건을 사용
+ * 검색창을 수정만 하고 조회하지 않은 값이 페이지 이동에 반영되는 것을 방지
+ */
+// 검색 버튼으로 확정한 조건을 페이지 이동과 재조회에도 유지한다.
+const appliedFilters = reactive({
+  name: '',
+  category: '',
+  status: '' as SearchStatus,
+})
+
+const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
+const { canModify } = useDemoGuard(isDemo) // canModify는 체험 상태에서 등록·수정 저장·삭제 요청을 진행하지 않도록 안내
+
+/**
+ * 등록과 수정에서 함께 사용하는 반응형 입력 객체
+ * 초기화할 때는 객체를 교체하지 않고 Object.assign으로 속성값을 갱신
+ */
+const form = reactive(initialForm())
 
 const baseUrl = '/api/home-item'
 
-// 선택 입력은 빈 문자열로 초기화하고, 저장할 때 null로 변환한다.
+/**
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성
+ */
 function initialForm() {
   return {
     name: '',
@@ -61,9 +82,6 @@ function initialForm() {
     memo: '',
   }
 }
-
-// 폼 입력값을 화면과 동기화한다.
-const form = reactive(initialForm())
 
 // 서버의 상태 코드를 화면에 표시할 한글 명칭으로 변환한다.
 function statusLabel(status: HomeItemStatus): string {
@@ -79,83 +97,40 @@ function statusLabel(status: HomeItemStatus): string {
   }
 }
 
-// 오류를 개발자 도구에 기록하고 화면에 안내 메시지를 표시한다.
-function showError(error: unknown) {
-  console.error(error)
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
-}
-
-// 다시 조회할 때는 첫 페이지부터 표시한다.
+/**
+ * 검색창의 입력값을 실제 조회 조건으로 확정하고 첫 페이지를 조회
+ * 수정 중이라면 입력 취소 여부를 먼저 확인
+ * 검색 결과의 페이지 수가 달라질 수 있으므로 기존 페이지 번호는 초기화
+ */
 async function searchHomeItems() {
   if (loading.value || saving.value) return
 
-  page.value = 1
-  await loadData()
-}
-
-// 로그인 상태에서는 개인 물품 목록을, 비로그인 상태에서는 체험용 물품 목록을 표시한다.
-async function loadData() {
-  if (loading.value) return
-
-  loading.value = true
-  errorMessage.value = ''
-  homeItems.value = []
-  totalCount.value = 0
-  totalPages.value = 0
-  isDemo.value = false
-
-  try {
-    const name = searchName.value.trim()
-    const category = searchCategory.value.trim()
-    const status = searchStatus.value
-    const currentPage = page.value
-    const pageSize = size.value
-
-    // 검색어의 공백과 특수문자를 안전하게 URL에 포함한다.
-    const params = new URLSearchParams({
-      name,
-      category,
-      status,
-      page: String(currentPage),
-      size: String(pageSize),
-    })
-
-    const result = await requestWithDemo<PageResponse<HomeItem>>(
-      `${baseUrl}?${params.toString()}`,
-      () => {
-        const demo = createDemoData()
-
-        // 이름·분류는 부분 검색하고, 상태는 정확히 일치하는 항목을 찾는다.
-        const filtered = demo.items.filter(
-          (item) =>
-            (!name || item.name.toLowerCase().includes(name.toLowerCase())) &&
-            (!category || item.category.toLowerCase().includes(category.toLowerCase())) &&
-            (!status || item.status === status),
-        )
-
-        // 샘플의 기존 배열 순서를 유지하며 페이지를 나눈다.
-        return paginateDemo(filtered, currentPage, pageSize)
-      },
-    )
-
-    homeItems.value = result.data.items
-    page.value = result.data.page
-    size.value = result.data.size
-    totalCount.value = result.data.totalCount
-    totalPages.value = result.data.totalPages
-    isDemo.value = result.isDemo
-  } catch (error: unknown) {
-    showError(error)
-  } finally {
-    loading.value = false
+  if (editingId.value !== null && !window.confirm('수정을 취소하고 검색할까요?')) {
+    return
   }
+
+  if (editingId.value !== null) resetForm()
+
+  // 제목의 앞뒤 공백을 제거하고, 현재 입력값을 적용된 검색 조건에 복사
+  Object.assign(appliedFilters, {
+    name: searchName.value.trim(),
+    category: searchCategory.value.trim(),
+    status: searchStatus.value,
+  })
+
+  resetPage() // 새로운 검색은 첫 페이지부터 시작하고 이전 처리 완료 안내
+  notice.value = ''
+  await loadData() // 확정한 검색 조건으로 물품 목록을 조회한다.
 }
 
-// 선택한 페이지의 물품 목록을 다시 조회한다.
+/**
+ * 적용된 검색 조건을 유지하면서 선택한 페이지를 조회
+ * 조회·저장 중이거나 이동할 수 없는 페이지이면 요청하지 않는다.
+ * 수정 중인 입력은 사용자 확인 후 초기화
+ */
 async function changePage(targetPage: number) {
   if (loading.value || saving.value) return
-  if (targetPage < 1 || targetPage > totalPages.value) return
-  if (targetPage === page.value) return
+  if (!canMoveTo(targetPage)) return
 
   if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
     return
@@ -166,7 +141,7 @@ async function changePage(targetPage: number) {
   }
 
   notice.value = ''
-  page.value = targetPage
+  page.value = targetPage // 목표 페이지를 설정한 뒤 기존 검색 조건으로 목록을 다시 조회
   await loadData()
 }
 
@@ -176,8 +151,11 @@ function resetForm() {
   Object.assign(form, initialForm())
 }
 
-// 선택한 물품을 수정 폼에 채운다.
-// 서버의 null 값은 입력란에서 사용할 빈 문자열로 변환한다.
+/**
+ * 선택한 물품을 수정 대상으로 지정하고 기존 값을 입력 폼에 복사
+ * 폼에서 사용하는 타입에 맞춰 구매 금액과 관리 주기를 문자열로 변환
+ * nullable 필드는 빈 문자열로 바꾸고 화면 상단의 입력 영역으로 이동
+ */
 function startEdit(item: HomeItem) {
   if (saving.value || loading.value) return
 
@@ -199,7 +177,12 @@ function startEdit(item: HomeItem) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// 신규 등록은 POST, 기존 물품 수정은 PUT으로 저장한다.
+/**
+ * 필수 입력과 금액을 검증한 뒤 물품을 등록하거나 수정
+ * editingId가 없으면 POST로 등록하고, 있으면 해당 ID에 PUT으로 수정
+ * 저장 성공 후 입력 폼을 초기화하고 적용된 검색 조건으로 목록을 다시 조회
+ * 저장 요청이 실패하면 입력값을 유지
+ */
 async function saveHomeItem() {
   if (saving.value || loading.value) return
   if (!canModify()) return
@@ -241,6 +224,8 @@ async function saveHomeItem() {
     return
   }
 
+  // 요청 시작 시 수정 대상 ID를 보관
+  // 저장 후 폼을 초기화해도 등록·수정 여부에 맞는 완료 문구를 표시할 수 있다.
   const id = editingId.value
   saving.value = true
 
@@ -248,6 +233,7 @@ async function saveHomeItem() {
     await request<null>(id === null ? baseUrl : `${baseUrl}/${id}`, {
       method: id === null ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      // 서버 요청 타입에 맞게 숫자를 변환하고 문자열의 앞뒤 공백을 제거, 선택 입력인 분류·날짜·메모 등 선택 입력값은 비어 있으면 null로 전달
       body: JSON.stringify({
         name: form.name.trim(),
         category: form.category.trim() || null,
@@ -260,19 +246,23 @@ async function saveHomeItem() {
       }),
     })
 
-    // 저장 성공 후 폼을 초기화하고 최신 목록을 조회한다.
-    resetForm()
+    resetForm() // 저장 성공 후 폼을 초기화하고 최신 목록을 조회한다.
     notice.value = id === null ? '등록됐습니다.' : '수정됐습니다.'
-    await loadData()
+    await loadData() // 저장된 내용과 검색 결과의 건수·페이지 변화를 반영하기 위해 재조회
   } catch (error: unknown) {
-    // 저장 요청이 실패하면 입력 내용을 유지한다.
+    // 저장 실패 시 입력 내용을 유지
     showError(error)
   } finally {
     saving.value = false
   }
 }
 
-// 사용자 확인 후 물품을 삭제하고 목록을 갱신한다.
+/**
+ * 사용자 확인 후 선택한 물품을 삭제
+ * 조회·저장 중에는 중복 요청을 막고, 체험 상태에서는 삭제를 진행하지 않는다.
+ * 삭제 성공 후 수정 대상과 목록을 갱신
+ * 삭제로 현재 페이지가 사라지는 경우는 loadData에서 보정
+ */
 async function deleteHomeItem(item: HomeItem) {
   if (saving.value || loading.value) return
   if (!canModify()) return
@@ -287,7 +277,7 @@ async function deleteHomeItem(item: HomeItem) {
       method: 'DELETE',
     })
 
-    // 수정 중인 물품을 삭제했다면 수정 상태도 해제한다.
+    // 수정 중이던 물품을 삭제했다면 폼도 초기화해 삭제된 항목을 다시 저장하지 않도록 한다.
     if (editingId.value === item.id) {
       resetForm()
     }
@@ -298,6 +288,74 @@ async function deleteHomeItem(item: HomeItem) {
     showError(error)
   } finally {
     saving.value = false
+  }
+}
+
+/**
+ * 물품 관리 목록을 조회
+ * 비로그인 유저는 requestWithDemo의 체험 데이터로 대체
+ * 실제 목록과 체험 목록 모두 PageResponse 형식으로 처리
+ * 삭제 등으로 현재 페이지가 사라지면 마지막 유효 페이지를 다시 조회
+ */
+async function loadData() {
+  // 진행 중인 목록 조회가 있으면 중복 요청을 막는다.
+  // 저장·삭제 처리 내부에서도 재조회하므로 saving 상태로는 차단하지 않는다.
+  if (loading.value) return
+
+  loading.value = true // 이전 목록과 건수를 비우고 로딩 상태로 전환, 현재 페이지 번호와 적용된 검색 조건은 유지
+  errorMessage.value = ''
+  homeItems.value = []
+  resetTotals()
+
+  try {
+    const filters = { ...appliedFilters }
+    const pageSize = size.value
+
+    // 같은 검색 조건으로 최초 조회와 마지막 페이지 보정에 사용한다.
+    function fetchItemPage(targetPage: number) {
+      // 검색 조건과 페이지 정보를 쿼리 문자열로 구성, URLSearchParams가 공백·한글·특수문자를 URL에 맞게 인코딩
+      const params = new URLSearchParams({
+        name: filters.name,
+        category: filters.category,
+        status: filters.status,
+        page: String(targetPage),
+        size: String(pageSize),
+      })
+
+      return requestWithDemo<PageResponse<HomeItem>>(`${baseUrl}?${params.toString()}`, () => {
+        const demo = createDemoData()
+
+        // 이름·분류는 부분 검색하고, 상태는 정확히 일치하는 항목을 찾는다.
+        const filtered = demo.items.filter(
+          (item) =>
+            (!filters.name || item.name.toLowerCase().includes(filters.name.toLowerCase())) &&
+            (!filters.category ||
+              (item.category ?? '').toLowerCase().includes(filters.category.toLowerCase())) &&
+            (!filters.status || item.status === filters.status),
+        )
+        // 샘플의 기존 배열 순서를 유지하며 페이지를 나눈다.
+        return paginateDemo(filtered, targetPage, pageSize)
+      })
+    }
+
+    let result = await fetchItemPage(page.value)
+
+    // 삭제 등으로 현재 페이지가 사라지면 마지막 유효 페이지를 조회한다.
+    // 검색 결과가 없어도 요청 페이지 번호는 최소 1로 유지한다.
+    const lastPage = Math.max(1, result.data.totalPages)
+
+    if (page.value > lastPage) {
+      page.value = lastPage
+      result = await fetchItemPage(lastPage)
+    }
+
+    homeItems.value = result.data.items
+    applyPage(result.data)
+    isDemo.value = result.isDemo
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    loading.value = false
   }
 }
 

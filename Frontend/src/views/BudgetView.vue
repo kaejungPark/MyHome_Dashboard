@@ -4,6 +4,7 @@ import { request, requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
 import { Coins, Target, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 // 월별 예산 조회 결과다.
 interface Budget {
@@ -26,13 +27,8 @@ const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,
 const budget = ref<Budget | null>(null) // 서버에서 조회한 예산
 const amount = ref<string | number>('') // 입력 중인 예산 금액
 const busy = ref(false) // 조회·저장·삭제 처리 여부
-const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 성공 메시지
-
-// 발생한 오류를 화면에 표시할 메시지로 변환한다.
-function showError(error: unknown) {
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
-}
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
 // 수정 취소 시 입력값을 마지막으로 조회한 예산 금액으로 되돌린다.
 function resetAmount() {

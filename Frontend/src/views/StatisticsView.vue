@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
 import { ChartPie, Search } from '@lucide/vue'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 // 카테고리별 지출 통계
 interface CategoryStatistics {
@@ -34,12 +35,7 @@ const statistics = ref<Statistics | null>(null)
 const now = new Date() // 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
 const selectedMonth = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
 const loading = ref(false)
-const errorMessage = ref('') // 오류 메시지
-
-// 발생한 오류를 화면에 표시할 메시지로 변환한다.
-function showError(error: unknown) {
-  errorMessage.value = error instanceof Error ? error.message : '통계 조회 중 오류가 발생했습니다.'
-}
+const { errorMessage, showError } = useErrorMessage('통계 조회 중 오류가 발생했습니다.') // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
 // 금액을 천 단위 쉼표로 표시한다.
 function formatAmount(amount: number | null) {

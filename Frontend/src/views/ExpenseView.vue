@@ -7,6 +7,8 @@ import { useDemoGuard } from '../composables/useDemoGuard'
 import type { PageResponse } from '../types/page'
 import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
+import { usePagination } from '../composables/usePagination'
+import { useErrorMessage } from '../composables/useErrorMessage'
 
 // 카테고리 선택 목록에서 사용하는 데이터다.
 interface Category {
@@ -27,39 +29,49 @@ interface Expense {
   memo: string | null // 메모
 }
 
-type ExpenseTypes = '' | 'FIXED' | 'VARIABLE'
+type ExpenseTypes = '' | 'FIXED' | 'VARIABLE' // 빈 문자열은 전체, FIXED는 고정 지출, VARIABLE은 변동 지출을 의미한다.
 
 // 조회 결과와 화면 처리 상태를 관리한다.
 const categories = ref<Category[]>([]) // 선택 가능한 카테고리 목록
 const expenses = ref<Expense[]>([]) // 조회한 지출 목록
-const page = ref(1)
-const size = ref(5)
-const totalCount = ref(0)
-const totalPages = ref(0)
-const searchTitle = ref('')
+const searchTitle = ref('') // 검색창에 입력 중인 조건
 const searchCategoryId = ref<number | ''>('') // 빈 문자열이면 전체 카테고리를 조회한다.
-const searchExpenseType = ref<ExpenseTypes>('')
+const searchExpenseType = ref<ExpenseTypes>('') // 조회용 지출유형
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
-const errorMessage = ref('') // 오류 메시지
 const notice = ref('') // 처리 완료 메시지
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
+const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
-// 검색 버튼으로 확정한 조건을 보관한다.
+// 생활비 목록의 페이지 상태와 공통 처리 함수를 사용
+const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
+  usePagination(5)
+
+/**
+ * 마지막으로 검색 버튼을 눌렀을 때의 조건을 저장
+ * 페이지 이동이나 저장·삭제 후 재조회할 때도 이 조건을 사용
+ * 검색창을 수정만 하고 조회하지 않은 값이 페이지 이동에 반영되는 것을 방지
+ */
 const appliedFilters = reactive({
   title: '',
   categoryId: '' as number | '',
   expenseType: '' as ExpenseTypes,
 })
 
-// 폼 입력값을 화면과 동기화한다.
+/**
+ * 등록과 수정에서 함께 사용하는 반응형 입력 객체
+ * 초기화할 때는 객체를 교체하지 않고 Object.assign으로 속성값을 갱신
+ */
 const form = reactive(initialForm())
 
-// 비로그인 체험 상태에서만 사용한다.
-const isDemo = ref(false)
-const { canModify } = useDemoGuard(isDemo)
+const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
+const { canModify } = useDemoGuard(isDemo) // canModify는 체험 상태에서 등록·수정 저장·삭제 요청을 진행하지 않도록 안내
 
-// UTC 변환으로 날짜가 달라지지 않도록 로컬 날짜를 사용한다.
+/**
+ * 브라우저의 로컬 날짜를 YYYY-MM-DD 형식으로 반환한다.
+ * 신규 지출의 기본 지출일로 사용한다.
+ * UTC 문자열로 변환하지 않아 시간대 변환으로 날짜가 달라지는 것을 피한다.
+ */
 function today() {
   const date = new Date()
   return [
@@ -69,7 +81,10 @@ function today() {
   ].join('-')
 }
 
-// 신규 등록과 수정 취소에 사용할 기본 입력값을 생성한다.
+/**
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성
+ * 카테고리와 금액은 빈 입력을 표현할 수 있도록 문자열로 관리하고, 저장 요청을 만들 때 숫자로 변환
+ */
 function initialForm() {
   return {
     categoryId: '',
@@ -82,13 +97,11 @@ function initialForm() {
   }
 }
 
-// 오류 원인은 개발자 도구에 기록하고, 화면에는 안내 메시지를 표시한다.
-function showError(error: unknown) {
-  console.error(error)
-  errorMessage.value = error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.'
-}
-
-// 검색 조건을 적용하고 첫 페이지부터 조회한다.
+/**
+ * 검색창의 입력값을 실제 조회 조건으로 확정하고 첫 페이지를 조회
+ * 수정 중이라면 입력 취소 여부를 먼저 확인
+ * 검색 결과의 페이지 수가 달라질 수 있으므로 기존 페이지 번호는 초기화
+ */
 async function searchExpenses() {
   if (loading.value || saving.value) return
 
@@ -98,22 +111,26 @@ async function searchExpenses() {
 
   if (editingId.value !== null) resetForm()
 
+  // 제목의 앞뒤 공백을 제거하고, 현재 입력값을 적용된 검색 조건에 복사
   Object.assign(appliedFilters, {
     title: searchTitle.value.trim(),
     categoryId: searchCategoryId.value,
     expenseType: searchExpenseType.value,
   })
 
-  page.value = 1
+  resetPage() // 새로운 검색은 첫 페이지부터 시작한다.
   notice.value = ''
-  await loadData()
+  await loadData() // 확정한 검색 조건으로 지출 목록을 조회한다.
 }
 
-// 선택한 페이지의 지출 목록을 다시 조회한다.
+/**
+ * 적용된 검색 조건을 유지하면서 선택한 페이지를 조회
+ * 조회·저장 중이거나 이동할 수 없는 페이지이면 요청하지 않는다.
+ * 수정 중인 입력은 사용자 확인 후 초기화
+ */
 async function changePage(targetPage: number) {
   if (loading.value || saving.value) return
-  if (targetPage < 1 || targetPage > totalPages.value) return
-  if (targetPage === page.value) return
+  if (!canMoveTo(targetPage)) return
 
   if (editingId.value !== null && !window.confirm('수정을 취소하고 다른 페이지로 이동할까요?')) {
     return
@@ -124,84 +141,16 @@ async function changePage(targetPage: number) {
   }
 
   notice.value = ''
-  page.value = targetPage
+  page.value = targetPage // 목표 페이지를 설정한 뒤 기존 검색 조건으로 목록을 다시 조회
   await loadData()
 }
 
-// 카테고리와 생활비를 조회한다. 비로그인이면 공통 함수가 샘플을 반환한다.
-async function loadData() {
-  if (loading.value) return
-
-  loading.value = true
-  errorMessage.value = ''
-  expenses.value = []
-  totalCount.value = 0
-  totalPages.value = 0
-
-  try {
-    const filters = { ...appliedFilters }
-    const pageSize = size.value
-    const demo = createDemoData()
-
-    // 지정한 페이지를 실제 API 또는 체험 데이터에서 조회한다.
-    const fetchExpensePage = (targetPage: number) => {
-      const params = new URLSearchParams({
-        title: filters.title,
-        expenseType: filters.expenseType,
-        page: String(targetPage),
-        size: String(pageSize),
-      })
-
-      if (filters.categoryId !== '') {
-        params.set('categoryId', String(filters.categoryId))
-      }
-
-      return requestWithDemo<PageResponse<Expense>>(`/api/expenses?${params.toString()}`, () => {
-        const filtered = demo.expenseList
-          .filter(
-            (item) =>
-              (!filters.title || item.title.toLowerCase().includes(filters.title.toLowerCase())) &&
-              (filters.categoryId === '' || item.categoryId === filters.categoryId) &&
-              (!filters.expenseType || item.expenseType === filters.expenseType),
-          )
-          .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate) || b.id - a.id)
-
-        return paginateDemo(filtered, targetPage, pageSize)
-      })
-    }
-
-    const [categoryResult, firstExpenseResult] = await Promise.all([
-      requestWithDemo<Category[]>('/api/categories', () => demo.categories),
-      fetchExpensePage(page.value),
-    ])
-
-    let expenseResult = firstExpenseResult
-    const lastPage = Math.max(1, expenseResult.data.totalPages)
-
-    // 삭제나 다른 요청의 변경으로 현재 페이지가 사라졌으면 보정한다.
-    if (page.value > lastPage) {
-      page.value = lastPage
-      expenseResult = await fetchExpensePage(lastPage)
-    }
-
-    categories.value = categoryResult.data
-
-    const result = expenseResult.data
-    expenses.value = result.items
-    page.value = result.page
-    size.value = result.size
-    totalCount.value = result.totalCount
-    totalPages.value = result.totalPages
-
-    isDemo.value = categoryResult.isDemo || expenseResult.isDemo
-  } catch (error: unknown) {
-    showError(error)
-  } finally {
-    loading.value = false
-  }
-}
-
-// 수정 중이면 PUT, 새 등록이면 POST로 저장한다.
+/**
+ * 필수 입력과 금액을 검증한 뒤 지출을 등록하거나 수정
+ * editingId가 없으면 POST로 등록하고, 있으면 해당 ID에 PUT으로 수정
+ * 저장 성공 후 입력 폼을 초기화하고 적용된 검색 조건으로 목록을 다시 조회
+ * 저장 요청이 실패하면 입력값을 유지
+ */
 async function saveExpense() {
   if (saving.value || loading.value) return
   if (!canModify()) return
@@ -209,6 +158,8 @@ async function saveExpense() {
   errorMessage.value = ''
   notice.value = ''
 
+  // 입력한 금액을 숫자로 변환하고 필수 입력 여부를 검사
+  // NaN·Infinity 등 유효하지 않은 숫자와 0 이하의 금액은 저장하지 않는다.
   const amount = Number(form.amount)
   if (
     !form.categoryId ||
@@ -221,6 +172,8 @@ async function saveExpense() {
     return
   }
 
+  // 요청 시작 시 수정 대상 ID를 보관
+  // 저장 후 폼을 초기화해도 등록·수정 여부에 맞는 완료 문구를 표시할 수 있다.
   const id = editingId.value
   saving.value = true
 
@@ -228,6 +181,7 @@ async function saveExpense() {
     await request<null>(id === null ? '/api/expenses' : `/api/expenses/${id}`, {
       method: id === null ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      // 서버 요청 타입에 맞게 숫자를 변환하고 문자열의 앞뒤 공백을 제거, 선택 입력인 결제 수단과 메모는 비어 있으면 null로 전달
       body: JSON.stringify({
         categoryId: Number(form.categoryId),
         amount,
@@ -239,24 +193,31 @@ async function saveExpense() {
       }),
     })
 
-    resetForm()
+    resetForm() // 저장 성공 후 폼을 초기화하고 최신 목록을 조회한다.
     notice.value = id === null ? '등록됐습니다.' : '수정됐습니다.'
-    await loadData()
+    await loadData() // 저장된 내용과 검색 결과의 건수·페이지 변화를 반영하기 위해 재조회
   } catch (error: unknown) {
-    // 저장 실패 시 입력 내용을 유지한다.
+    // 저장 실패 시 입력 내용을 유지
     showError(error)
   } finally {
     saving.value = false
   }
 }
 
-// 수정 상태를 해제하고 입력값을 신규 등록 상태로 되돌린다.
+/**
+ * 수정 대상 ID를 해제하고 입력값을 신규 등록 상태로 초기화
+ * 기존 reactive 객체를 유지하면서 각 속성의 값만 변경
+ */
 function resetForm() {
   editingId.value = null
   Object.assign(form, initialForm())
 }
 
-// 선택한 지출을 수정 폼에 채운다.
+/**
+ * 선택한 지출을 수정 대상으로 지정하고 기존 값을 입력 폼에 복사
+ * 폼에서 사용하는 타입에 맞춰 카테고리 ID와 금액을 문자열로 변환
+ * nullable 필드는 빈 문자열로 바꾸고 화면 상단의 입력 영역으로 이동
+ */
 function startEdit(expense: Expense) {
   editingId.value = expense.id
   errorMessage.value = ''
@@ -275,7 +236,12 @@ function startEdit(expense: Expense) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
-// 지출 삭제. 처리 중 중복 요청을 막는다.
+/**
+ * 사용자 확인 후 선택한 지출을 삭제
+ * 조회·저장 중에는 중복 요청을 막고, 체험 상태에서는 삭제를 진행하지 않는다.
+ * 삭제 성공 후 수정 대상과 목록을 갱신
+ * 삭제로 현재 페이지가 사라지는 경우는 loadData에서 보정
+ */
 async function deleteExpense(expense: Expense) {
   if (saving.value || loading.value) return
   if (!canModify()) return
@@ -304,7 +270,97 @@ async function deleteExpense(expense: Expense) {
   }
 }
 
-// 화면이 처음 표시되면 카테고리와 지출 목록을 조회한다.
+/**
+ * 카테고리와 검색 조건에 맞는 지출 목록을 조회
+ * 비로그인 유저는 requestWithDemo의 체험 데이터로 대체
+ * 실제 목록과 체험 목록 모두 PageResponse 형식으로 처리
+ * 삭제 등으로 현재 페이지가 사라지면 마지막 유효 페이지를 다시 조회
+ */
+async function loadData() {
+  // 진행 중인 목록 조회가 있으면 중복 요청을 막는다.
+  // 저장·삭제 처리 내부에서도 재조회하므로 saving 상태로는 차단하지 않는다.
+  if (loading.value) return
+
+  loading.value = true // 이전 목록과 건수를 비우고 로딩 상태로 전환, 현재 페이지 번호와 적용된 검색 조건은 유지
+  errorMessage.value = ''
+  expenses.value = []
+  resetTotals()
+
+  try {
+    const filters = { ...appliedFilters } // 이번 조회에 사용할 조건과 페이지 크기를 복사, 마지막 페이지 보정으로 재요청하더라도 같은 조건을 사용
+    const pageSize = size.value
+
+    const demo = createDemoData() // 조회에서 사용할 체험 데이터를 생성, 실제 API 대신 체험 데이터를 반환할 때 아래 콜백에서 사용
+
+    // 지정한 페이지를 조회하는 내부 함수, 최초 조회와 마지막 페이지 보정에 같은 요청 구성을 재사용
+    const fetchExpensePage = (targetPage: number) => {
+      // 검색 조건과 페이지 정보를 쿼리 문자열로 구성, URLSearchParams가 공백·한글·특수문자를 URL에 맞게 인코딩
+      const params = new URLSearchParams({
+        title: filters.title,
+        expenseType: filters.expenseType,
+        page: String(targetPage),
+        size: String(pageSize),
+      })
+
+      // 전체 카테고리를 선택한 경우 categoryId를 보내지 않는다. 선택한 경우에만 숫자 ID를 문자열로 변환해 전달
+      if (filters.categoryId !== '') {
+        params.set('categoryId', String(filters.categoryId))
+      }
+
+      return requestWithDemo<PageResponse<Expense>>(`/api/expenses?${params.toString()}`, () => {
+        /**
+         * 체험 목록에도 제목·카테고리·지출 유형 조건을 적용
+         * 제목은 대소문자를 구분하지 않는 포함 검색이며, 빈 조건은 전체로 처리
+         * 지출일 내림차순으로 정렬하고 같은 날짜는 ID 내림차순으로 순서를 정한다.
+         */
+        const filtered = demo.expenseList
+          .filter(
+            (item) =>
+              (!filters.title || item.title.toLowerCase().includes(filters.title.toLowerCase())) &&
+              (filters.categoryId === '' || item.categoryId === filters.categoryId) &&
+              (!filters.expenseType || item.expenseType === filters.expenseType),
+          )
+          .sort((a, b) => b.expenseDate.localeCompare(a.expenseDate) || b.id - a.id)
+
+        // 필터링과 정렬을 마친 전체 결과에서 요청한 페이지의 항목만 추출, 전체 건수와 페이지 수도 필터링된 결과를 기준으로 계산
+        return paginateDemo(filtered, targetPage, pageSize)
+      })
+    }
+
+    // 서로 의존하지 않는 카테고리와 지출 목록을 병렬로 조회, 두 요청이 모두 성공한 뒤 화면에 반영하며, 하나라도 실패하면 catch에서 처리
+    const [categoryResult, firstExpenseResult] = await Promise.all([
+      requestWithDemo<Category[]>('/api/categories', () => demo.categories),
+      fetchExpensePage(page.value),
+    ])
+
+    let expenseResult = firstExpenseResult
+    // 결과가 0건이면 전체 페이지 수는 0이지만, 요청 페이지 번호는 최소 1로 유지
+    const lastPage = Math.max(1, expenseResult.data.totalPages)
+
+    // 마지막 페이지의 항목 삭제 등으로 현재 페이지가 범위를 벗어나면 같은 검색 조건으로 마지막 유효 페이지를 한 번 더 조회
+    if (page.value > lastPage) {
+      page.value = lastPage
+      expenseResult = await fetchExpensePage(lastPage)
+    }
+
+    categories.value = categoryResult.data
+
+    const result = expenseResult.data
+
+    // 목록 데이터는 화면에 저장하고, 페이지 정보는 공통 함수에 반영
+    expenses.value = result.items
+    applyPage(result)
+
+    // 카테고리 또는 지출 목록 중 하나라도 체험 데이터이면 체험 상태로 표시
+    isDemo.value = categoryResult.isDemo || expenseResult.isDemo
+  } catch (error: unknown) {
+    showError(error)
+  } finally {
+    loading.value = false // 성공 여부와 관계없이 로딩을 해제해 다시 조회
+  }
+}
+
+// 화면이 처음 표시되면 카테고리와 지출 목록을 조회
 onMounted(loadData)
 </script>
 
