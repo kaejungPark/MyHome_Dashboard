@@ -8,7 +8,8 @@ import {
   ChartPie,
   CalendarDays,
   CalendarCheck,
-  Package,
+  Carrot,
+  ListChecks,
   BellRing,
 } from '@lucide/vue' // 대시보드 요약 카드에 사용할 아이콘
 import { requestWithDemo } from '../api/client'
@@ -38,6 +39,20 @@ interface DashboardPayment {
   paymentDate: string
 }
 
+interface DashboardIngredient {
+  id: number
+  name: string
+  storageLocation: 'REFRIGERATOR' | 'FREEZER' | 'PANTRY'
+  expirationDate: string
+}
+
+interface DashboardHouseholdTask {
+  id: number
+  name: string
+  taskType: 'CHORE' | 'CONSUMABLE'
+  nextDueDate: string
+}
+
 // 대시보드 API 응답 데이터
 interface DashboardResponse {
   today: string // 조회 기준 날짜
@@ -49,8 +64,14 @@ interface DashboardResponse {
   usageRate: number | null // 예산 사용률
   recurringAmount: number // 고정 지출 예정 합계
   schedules: DashboardSchedule[] // 일정 목록
+  scheduleCount: number //대상 일정 전체 건수
   items: DashboardItem[] // 물품 목록
   payments: DashboardPayment[] // 조회 기준일부터 7일 뒤까지 납부 예정인 미납 항목
+  paymentCount: number // 대상 미납 전체 건수
+  ingredients: DashboardIngredient[] // 식재료 목록
+  ingredientCount: number // 식재료 전체 건수
+  householdTasks: DashboardHouseholdTask[] // 집안일·소모품 목록
+  householdTaskCount: number // 집안일·소모품 전체 건수
 }
 
 // 화면에서 사용하는 데이터와 처리 상태다.
@@ -140,213 +161,299 @@ onMounted(loadData)
     </p>
 
     <p v-if="loading" role="status">대시보드를 불러오는 중입니다.</p>
+
     <p v-else-if="errorMessage" class="error-message" role="alert">
       {{ errorMessage }}
     </p>
 
-    <!--이번 달 생활비-->
-    <section v-else-if="dashboard" class="expense-section" aria-labelledby="expense-heading">
-      <div class="section-header">
-        <div class="section-title">
-          <h2 id="expense-heading">이번 달 생활비</h2>
-          <span class="month-badge">{{ dashboard.month }}</span>
-        </div>
-
-        <RouterLink to="/statistics" class="more-link"> 더 보기 &rsaquo; </RouterLink>
-      </div>
-
-      <div class="summary-grid">
-        <article class="summary-card">
-          <div class="card-icon" aria-hidden="true">
-            <Wallet :size="26" />
-          </div>
-          <h3>이번 달 지출</h3>
-          <p class="amount">{{ formatAmount(dashboard.totalAmount) }}<span>원</span></p>
-        </article>
-
-        <article class="summary-card">
-          <div class="card-icon icon-slate" aria-hidden="true">
-            <Coins :size="26" />
-          </div>
-          <h3>월 예산</h3>
-          <p class="amount">
-            {{ dashboard.configured ? formatAmount(dashboard.budgetAmount) : '미등록' }}
-            <span v-if="dashboard.configured">원</span>
-          </p>
-        </article>
-
-        <article class="summary-card">
-          <div class="card-icon icon-green" aria-hidden="true">
-            <PiggyBank :size="26" />
-          </div>
-          <h3>잔여 예산</h3>
-          <p
-            class="amount"
-            :class="{
-              remaining: dashboard.remainingAmount !== null && dashboard.remainingAmount >= 0,
-              'over-budget': dashboard.remainingAmount !== null && dashboard.remainingAmount < 0,
-            }"
-          >
-            {{ formatAmount(dashboard.remainingAmount) }}
-            <span v-if="dashboard.remainingAmount !== null">원</span>
-          </p>
-        </article>
-
-        <article class="summary-card">
-          <div class="card-icon" aria-hidden="true">
-            <ChartPie :size="26" />
-          </div>
-          <h3>예산 사용률</h3>
-          <p
-            class="amount"
-            :class="{
-              'over-budget': dashboard.usageRate !== null && dashboard.usageRate > 100,
-            }"
-          >
-            {{ dashboard.usageRate?.toFixed(2) ?? '—' }}
-            <span v-if="dashboard.usageRate !== null">%</span>
-          </p>
-
-          <progress
-            v-if="dashboard.usageRate !== null"
-            class="usage-progress"
-            :value="Math.min(100, Math.max(0, dashboard.usageRate))"
-            max="100"
-            aria-label="예산 사용률"
-          >
-            {{ dashboard.usageRate }}%
-          </progress>
-
-          <p v-if="dashboard.configured && dashboard.budgetAmount === 0" class="card-note">
-            예산이 0원이므로 사용률을 계산하지 않습니다.
-          </p>
-        </article>
-      </div>
-    </section>
-
-    <div v-if="!loading && !errorMessage && dashboard" class="detail-grid">
-      <!-- 이번 달 고정 지출 예정 -->
-      <section class="detail-section" aria-labelledby="recurring-heading">
+    <template v-else-if="dashboard">
+      <!-- 상단: 이번 달 생활비·예산 요약 -->
+      <section class="expense-section" aria-labelledby="expense-heading">
         <div class="section-header">
           <div class="section-title">
-            <div class="card-icon heading-icon" aria-hidden="true">
-              <CalendarDays :size="26" />
-            </div>
-            <h2 id="recurring-heading">이번 달 고정 지출 예정</h2>
+            <h2 id="expense-heading">이번 달 생활비</h2>
+            <span class="month-badge">{{ dashboard.month }}</span>
           </div>
 
-          <RouterLink to="/recurring-expenses" class="more-link"> 더 보기 &rsaquo; </RouterLink>
+          <RouterLink to="/statistics" class="more-link"> 더 보기 &rsaquo; </RouterLink>
         </div>
 
-        <p class="amount">{{ formatAmount(dashboard.recurringAmount) }}<span>원</span></p>
-
-        <p class="recurring-note">실제 지출과 별도로 계산한 예정 금액입니다.</p>
-      </section>
-      <!-- 납부일이 가까운 고정 지출 -->
-      <section class="detail-section" aria-labelledby="upcoming-payment-heading">
-        <!-- 오늘부터 7일 이내에 납부할 미납 고정 지출 -->
-        <div class="section-header">
-          <div class="section-title">
-            <div class="card-icon heading-icon" aria-hidden="true">
-              <BellRing :size="26" />
+        <div class="summary-grid">
+          <article class="summary-card">
+            <div class="card-icon" aria-hidden="true">
+              <Wallet :size="26" />
             </div>
-            <h2 id="upcoming-payment-heading">납부일이 가까운 고정 지출</h2>
-          </div>
+            <h3>이번 달 지출</h3>
+            <p class="amount">{{ formatAmount(dashboard.totalAmount) }}<span>원</span></p>
+          </article>
 
-          <RouterLink to="/recurring-expenses" class="more-link"> 더 보기 &rsaquo; </RouterLink>
-        </div>
-
-        <p class="detail-description">오늘부터 7일 이내 · 미납 항목</p>
-
-        <p v-if="dashboard.payments.length === 0" class="empty-message">
-          7일 이내 납부할 미납 항목이 없습니다.
-        </p>
-
-        <ul v-else class="detail-list">
-          <li v-for="payment in dashboard.payments" :key="`${payment.id}-${payment.paymentDate}`">
-            <RouterLink to="/recurring-expenses" class="detail-row payment-link">
-              <div class="detail-info">
-                <span class="detail-name">{{ payment.title }}</span>
-                <span class="payment-amount"> {{ formatAmount(payment.amount) }}원 </span>
-                <time :datetime="payment.paymentDate"> 납부 예정일 {{ payment.paymentDate }} </time>
-              </div>
-
-              <span
-                class="dday-badge"
-                :class="{ 'is-today': payment.paymentDate === dashboard.today }"
-              >
-                {{ formatDday(payment.paymentDate) }}
-              </span>
-            </RouterLink>
-          </li>
-        </ul>
-      </section>
-    </div>
-
-    <div v-if="!loading && !errorMessage && dashboard" class="detail-grid">
-      <section class="detail-section" aria-labelledby="schedule-heading">
-        <div class="section-header">
-          <div class="section-title">
-            <CalendarCheck :size="24" class="section-icon" aria-hidden="true" />
-            <h2 id="schedule-heading">마감이 가까운 일정</h2>
-          </div>
-
-          <RouterLink to="/schedules" class="more-link"> 더 보기 &rsaquo; </RouterLink>
-        </div>
-
-        <p class="detail-description">오늘부터 30일 이내 · 최대 5개</p>
-
-        <p v-if="dashboard.schedules.length === 0" class="empty-message">
-          마감이 가까운 미완료 일정이 없습니다.
-        </p>
-
-        <ul v-else class="detail-list">
-          <li v-for="schedule in dashboard.schedules" :key="schedule.id" class="detail-row">
-            <div class="detail-info">
-              <span class="detail-name">{{ schedule.title }}</span>
-              <time :datetime="schedule.dueDate"> 마감일 {{ schedule.dueDate }} </time>
+          <article class="summary-card">
+            <div class="card-icon icon-slate" aria-hidden="true">
+              <Coins :size="26" />
             </div>
+            <h3>월 예산</h3>
+            <p class="amount">
+              {{ dashboard.configured ? formatAmount(dashboard.budgetAmount) : '미등록' }}
+              <span v-if="dashboard.configured">원</span>
+            </p>
+          </article>
 
-            <span class="dday-badge" :class="{ 'is-today': schedule.dueDate === dashboard.today }">
-              {{ formatDday(schedule.dueDate) }}
-            </span>
-          </li>
-        </ul>
-      </section>
-
-      <section class="detail-section" aria-labelledby="item-heading">
-        <div class="section-header">
-          <div class="section-title">
-            <Package :size="24" class="section-icon" aria-hidden="true" />
-            <h2 id="item-heading">보증 종료 예정 물품</h2>
-          </div>
-
-          <RouterLink to="/items" class="more-link"> 더 보기 &rsaquo; </RouterLink>
-        </div>
-
-        <p class="detail-description">오늘부터 30일 이내 · 최대 5개</p>
-
-        <p v-if="dashboard.items.length === 0" class="empty-message">
-          보증 종료가 가까운 물품이 없습니다.
-        </p>
-
-        <ul v-else class="detail-list">
-          <li v-for="item in dashboard.items" :key="item.id" class="detail-row">
-            <div class="detail-info">
-              <span class="detail-name">{{ item.name }}</span>
-              <time :datetime="item.warrantyEndDate"> 보증 종료일 {{ item.warrantyEndDate }} </time>
+          <article class="summary-card">
+            <div class="card-icon icon-green" aria-hidden="true">
+              <PiggyBank :size="26" />
             </div>
-
-            <span
-              class="dday-badge"
-              :class="{ 'is-today': item.warrantyEndDate === dashboard.today }"
+            <h3>잔여 예산</h3>
+            <p
+              class="amount"
+              :class="{
+                remaining: dashboard.remainingAmount !== null && dashboard.remainingAmount >= 0,
+                'over-budget': dashboard.remainingAmount !== null && dashboard.remainingAmount < 0,
+              }"
             >
-              {{ formatDday(item.warrantyEndDate) }}
-            </span>
-          </li>
-        </ul>
+              {{ formatAmount(dashboard.remainingAmount) }}
+              <span v-if="dashboard.remainingAmount !== null">원</span>
+            </p>
+          </article>
+
+          <article class="summary-card">
+            <div class="card-icon" aria-hidden="true">
+              <ChartPie :size="26" />
+            </div>
+            <h3>예산 사용률</h3>
+            <p
+              class="amount"
+              :class="{
+                'over-budget': dashboard.usageRate !== null && dashboard.usageRate > 100,
+              }"
+            >
+              {{ dashboard.usageRate?.toFixed(2) ?? '—' }}
+              <span v-if="dashboard.usageRate !== null">%</span>
+            </p>
+
+            <progress
+              v-if="dashboard.usageRate !== null"
+              class="usage-progress"
+              :value="Math.min(100, Math.max(0, dashboard.usageRate))"
+              max="100"
+              aria-label="예산 사용률"
+            >
+              {{ dashboard.usageRate }}%
+            </progress>
+
+            <p v-if="dashboard.configured && dashboard.budgetAmount === 0" class="card-note">
+              예산이 0원이므로 사용률을 계산하지 않습니다.
+            </p>
+          </article>
+        </div>
       </section>
-    </div>
+
+      <!-- 두 번째 줄: 고정 지출 / 일정 -->
+      <div class="detail-grid">
+        <section class="detail-section" aria-labelledby="recurring-heading">
+          <div class="section-header">
+            <div class="section-title">
+              <CalendarDays :size="24" class="section-icon" aria-hidden="true" />
+              <h2 id="recurring-heading">고정 지출</h2>
+            </div>
+
+            <RouterLink to="/recurring-expenses" class="more-link"> 더 보기 &rsaquo; </RouterLink>
+          </div>
+
+          <p class="detail-description">이번 달 고정 지출 예정 합계</p>
+          <p class="amount">{{ formatAmount(dashboard.recurringAmount) }}<span>원</span></p>
+          <p class="recurring-note">실제 지출과 별도로 계산한 예정 금액입니다.</p>
+
+          <div class="section-header">
+            <div class="section-title">
+              <BellRing :size="20" aria-hidden="true" />
+              <h3>납부일이 가까운 미납 항목</h3>
+              <span class="count-badge">{{ dashboard.paymentCount }}건</span>
+            </div>
+          </div>
+
+          <p class="detail-description">오늘부터 7일 이내 · 최대 3건</p>
+
+          <p v-if="dashboard.payments.length === 0" class="empty-message">
+            7일 이내 납부할 미납 항목이 없습니다.
+          </p>
+
+          <ul v-else class="detail-list">
+            <li v-for="payment in dashboard.payments" :key="`${payment.id}-${payment.paymentDate}`">
+              <RouterLink to="/recurring-expenses" class="detail-row payment-link">
+                <div class="detail-info">
+                  <span class="detail-name">{{ payment.title }}</span>
+                  <span class="payment-amount"> {{ formatAmount(payment.amount) }}원 </span>
+                  <time :datetime="payment.paymentDate">
+                    납부 예정일 {{ payment.paymentDate }}
+                  </time>
+                </div>
+
+                <span
+                  class="dday-badge"
+                  :class="{
+                    'is-today': payment.paymentDate === dashboard.today,
+                  }"
+                >
+                  {{ formatDday(payment.paymentDate) }}
+                </span>
+              </RouterLink>
+            </li>
+          </ul>
+        </section>
+
+        <section class="detail-section" aria-labelledby="schedule-heading">
+          <div class="section-header">
+            <div class="section-title">
+              <CalendarCheck :size="24" class="section-icon" aria-hidden="true" />
+              <h2 id="schedule-heading">확인할 일정</h2>
+              <span class="count-badge">{{ dashboard.scheduleCount }}건</span>
+            </div>
+
+            <RouterLink to="/schedules" class="more-link"> 더 보기 &rsaquo; </RouterLink>
+          </div>
+
+          <p class="detail-description">기한 경과 포함 · 7일 이내 마감 · 미완료 · 최대 3건</p>
+
+          <p v-if="dashboard.schedules.length === 0" class="empty-message">
+            확인할 미완료 일정이 없습니다.
+          </p>
+
+          <ul v-else class="detail-list">
+            <li v-for="schedule in dashboard.schedules" :key="schedule.id">
+              <RouterLink to="/schedules" class="detail-row payment-link">
+                <div class="detail-info">
+                  <span class="detail-name">{{ schedule.title }}</span>
+                  <time :datetime="schedule.dueDate"> 마감일 {{ schedule.dueDate }} </time>
+                </div>
+
+                <span
+                  class="dday-badge"
+                  :class="{
+                    'is-overdue': schedule.dueDate < dashboard.today,
+                    'is-today': schedule.dueDate === dashboard.today,
+                  }"
+                >
+                  {{
+                    schedule.dueDate < dashboard.today
+                      ? '기한 지남'
+                      : schedule.dueDate === dashboard.today
+                        ? '오늘 마감'
+                        : formatDday(schedule.dueDate)
+                  }}
+                </span>
+              </RouterLink>
+            </li>
+          </ul>
+        </section>
+      </div>
+
+      <!-- 세 번째 줄: 식재료 / 집안일·소모품 -->
+      <div class="detail-grid">
+        <section class="detail-section" aria-labelledby="ingredient-heading">
+          <div class="section-header">
+            <div class="section-title">
+              <Carrot :size="24" class="section-icon" aria-hidden="true" />
+              <h2 id="ingredient-heading">소비기한 확인</h2>
+              <span class="count-badge"> {{ dashboard.ingredientCount }}건 </span>
+            </div>
+
+            <RouterLink to="/ingredients" class="more-link"> 더 보기 &rsaquo; </RouterLink>
+          </div>
+
+          <p class="detail-description">기한 경과 포함 · 3일 이내 · 보관 중 · 최대 3건</p>
+
+          <p v-if="dashboard.ingredients.length === 0" class="empty-message">
+            소비기한 확인이 필요한 식재료가 없습니다.
+          </p>
+
+          <ul v-else class="detail-list">
+            <li v-for="ingredient in dashboard.ingredients" :key="ingredient.id">
+              <RouterLink to="/ingredients" class="detail-row payment-link">
+                <div class="detail-info">
+                  <span class="detail-name">{{ ingredient.name }}</span>
+                  <span>
+                    {{
+                      ingredient.storageLocation === 'REFRIGERATOR'
+                        ? '냉장'
+                        : ingredient.storageLocation === 'FREEZER'
+                          ? '냉동'
+                          : '실온'
+                    }}
+                  </span>
+                  <time :datetime="ingredient.expirationDate">
+                    소비기한 {{ ingredient.expirationDate }}
+                  </time>
+                </div>
+
+                <span
+                  class="dday-badge"
+                  :class="{
+                    'is-overdue': ingredient.expirationDate < dashboard.today,
+                    'is-today': ingredient.expirationDate === dashboard.today,
+                  }"
+                >
+                  {{
+                    ingredient.expirationDate < dashboard.today
+                      ? '소비기한 경과'
+                      : ingredient.expirationDate === dashboard.today
+                        ? '오늘까지'
+                        : formatDday(ingredient.expirationDate)
+                  }}
+                </span>
+              </RouterLink>
+            </li>
+          </ul>
+        </section>
+
+        <section class="detail-section" aria-labelledby="household-heading">
+          <div class="section-header">
+            <div class="section-title">
+              <ListChecks :size="24" class="section-icon" aria-hidden="true" />
+              <h2 id="household-heading">집안일·소모품</h2>
+              <span class="count-badge"> {{ dashboard.householdTaskCount }}건 </span>
+            </div>
+
+            <RouterLink to="/household-tasks" class="more-link"> 더 보기 &rsaquo; </RouterLink>
+          </div>
+
+          <p class="detail-description">예정일 경과 포함 · 7일 이내 · 사용 중 · 최대 3건</p>
+
+          <p v-if="dashboard.householdTasks.length === 0" class="empty-message">
+            예정된 집안일이나 소모품 교체 항목이 없습니다.
+          </p>
+
+          <ul v-else class="detail-list">
+            <li v-for="task in dashboard.householdTasks" :key="task.id">
+              <RouterLink to="/household-tasks" class="detail-row payment-link">
+                <div class="detail-info">
+                  <span class="detail-name">{{ task.name }}</span>
+                  <span>
+                    {{ task.taskType === 'CHORE' ? '집안일' : '소모품' }}
+                  </span>
+                  <time :datetime="task.nextDueDate"> 다음 예정일 {{ task.nextDueDate }} </time>
+                </div>
+
+                <span
+                  class="dday-badge"
+                  :class="{
+                    'is-overdue': task.nextDueDate < dashboard.today,
+                    'is-today': task.nextDueDate === dashboard.today,
+                  }"
+                >
+                  {{
+                    task.nextDueDate < dashboard.today
+                      ? '예정일 지남'
+                      : task.nextDueDate === dashboard.today
+                        ? '오늘 예정'
+                        : formatDday(task.nextDueDate)
+                  }}
+                </span>
+              </RouterLink>
+            </li>
+          </ul>
+        </section>
+      </div>
+    </template>
   </main>
 </template>
 
@@ -723,6 +830,23 @@ onMounted(loadData)
   font-weight: 600;
 }
 
+/* 기한이 지난 항목을 구분한다. */
+.dday-badge.is-overdue {
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+
+/* 긴 상태 문구가 줄바꿈되거나 좁아지는 것을 막는다. */
+.dday-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.section-title h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
 @media (max-width: 640px) {
   .crud-page .page-heading h1,
   .crud-page.page-heading h1 {
@@ -739,6 +863,13 @@ onMounted(loadData)
 @media (max-width: 560px) {
   .detail-section {
     padding: 16px;
+  }
+}
+
+/* 좁은 화면에서는 요약 영역을 한 열로 배치한다. */
+@media (max-width: 768px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

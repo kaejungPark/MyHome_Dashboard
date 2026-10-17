@@ -317,44 +317,6 @@ export function createDemoData(selectedMonth?: string) {
   // 고정 지출 미납 안내는 오늘부터 7일 뒤까지 표시한다.
   const paymentEndDate = addDays(today, 7)
 
-  const dashboard = {
-    today,
-    month,
-    totalAmount,
-    configured: true,
-    budgetAmount,
-    remainingAmount,
-    usageRate,
-    recurringAmount: monthlyPayment.totalAmount,
-    schedules: schedules
-      .filter((item) => !item.completed && item.dueDate >= today && item.dueDate <= endDate)
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 5)
-      .map(({ id, title, scheduleType, dueDate }) => ({
-        id,
-        title,
-        scheduleType,
-        dueDate,
-      })),
-    items: items
-      .filter(
-        (item) =>
-          item.status !== 'DISPOSED' &&
-          item.warrantyEndDate >= today &&
-          item.warrantyEndDate <= endDate,
-      )
-      .sort((a, b) => a.warrantyEndDate.localeCompare(b.warrantyEndDate))
-      .slice(0, 5)
-      .map(({ id, name, warrantyEndDate }) => ({
-        id,
-        name,
-        warrantyEndDate,
-      })),
-    payments: payments
-      .filter((item) => item.paymentDate >= today && item.paymentDate <= paymentEndDate)
-      .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.id - b.id),
-  }
-
   // 소비기한과 보관 상태별 화면 표시를 확인하기 위한 체험용 식재료다.
   const ingredients = [
     {
@@ -525,6 +487,83 @@ export function createDemoData(selectedMonth?: string) {
       createdDt: `${addDays(today, -27)}T03:00:00`,
     },
   ]
+
+  // 대시보드 목록과 전체 건수에 동일한 조회 조건을 적용한다.
+  const dashboardSchedules = schedules
+    .filter((item) => !item.completed && item.dueDate <= paymentEndDate)
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.id - b.id)
+
+  const dashboardPayments = payments
+    .filter((item) => item.paymentDate >= today && item.paymentDate <= paymentEndDate)
+    .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.id - b.id)
+
+  const ingredientEndDate = addDays(today, 3)
+
+  // 소비기한이 있는 보관 중 식재료만 대상으로 한다.
+  const dashboardIngredients = ingredients
+    .flatMap((item) => {
+      if (
+        item.status !== 'STORED' ||
+        !item.expirationDate ||
+        item.expirationDate > ingredientEndDate
+      ) {
+        return []
+      }
+
+      return [
+        {
+          id: item.id,
+          name: item.name,
+          storageLocation: item.storageLocation,
+          expirationDate: item.expirationDate,
+        },
+      ]
+    })
+    .sort((a, b) => a.expirationDate.localeCompare(b.expirationDate) || a.id - b.id)
+
+  const dashboardHouseholdTasks = householdTasks
+    .filter((item) => item.active && item.nextDueDate <= paymentEndDate)
+    .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate) || a.id - b.id)
+
+  // 전체 건수는 제한 전 목록으로 계산하고, 표시 목록만 최대 3건으로 제한한다.
+  const dashboard = {
+    today,
+    month,
+    totalAmount,
+    configured: true,
+    budgetAmount,
+    remainingAmount,
+    usageRate,
+    recurringAmount: monthlyPayment.totalAmount,
+
+    schedules: dashboardSchedules.slice(0, 3),
+    scheduleCount: dashboardSchedules.length,
+
+    payments: dashboardPayments.slice(0, 3),
+    paymentCount: dashboardPayments.length,
+
+    ingredients: dashboardIngredients.slice(0, 3),
+    ingredientCount: dashboardIngredients.length,
+
+    householdTasks: dashboardHouseholdTasks.slice(0, 3),
+    householdTaskCount: dashboardHouseholdTasks.length,
+
+    // 기존 응답 타입과의 호환을 위해 물품 요약은 우선 유지한다.
+    items: items
+      .filter(
+        (item) =>
+          item.status !== 'DISPOSED' &&
+          item.warrantyEndDate >= today &&
+          item.warrantyEndDate <= endDate,
+      )
+      .sort((a, b) => a.warrantyEndDate.localeCompare(b.warrantyEndDate) || a.id - b.id)
+      .slice(0, 5)
+      .map(({ id, name, warrantyEndDate }) => ({
+        id,
+        name,
+        warrantyEndDate,
+      })),
+  }
 
   return {
     categories,
