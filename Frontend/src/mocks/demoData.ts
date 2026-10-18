@@ -1,16 +1,8 @@
+import { today as koreaToday } from '../utils/date'
+
 // 체험 데이터 전용 코드다. 실제 서버에 저장하지 않는다.
 type ScheduleType = 'GENERAL' | 'PAYMENT' | 'RENEWAL'
 type ItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
-
-// 한국 날짜를 YYYY-MM-DD로 반환한다.
-function koreaToday(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
-}
 
 // 날짜 계산은 UTC로 통일해 시간대에 따른 날짜 오차를 방지한다.
 function addDays(dateText: string, days: number): string {

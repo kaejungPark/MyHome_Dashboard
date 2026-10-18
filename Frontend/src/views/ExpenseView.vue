@@ -9,6 +9,7 @@ import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { today } from '../utils/date'
 
 // 카테고리 선택 목록에서 사용하는 데이터다.
 interface Category {
@@ -66,20 +67,6 @@ const form = reactive(initialForm())
 
 const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
 const { canModify } = useDemoGuard(isDemo) // canModify는 체험 상태에서 등록·수정 저장·삭제 요청을 진행하지 않도록 안내
-
-/**
- * 브라우저의 로컬 날짜를 YYYY-MM-DD 형식으로 반환한다.
- * 신규 지출의 기본 지출일로 사용한다.
- * UTC 문자열로 변환하지 않아 시간대 변환으로 날짜가 달라지는 것을 피한다.
- */
-function today() {
-  const date = new Date()
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-')
-}
 
 /**
  * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성

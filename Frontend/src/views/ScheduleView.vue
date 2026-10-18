@@ -9,6 +9,7 @@ import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { today, currentMonth } from '../utils/date'
 
 // 일정 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Schedule {
@@ -38,9 +39,8 @@ const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시
  */
 const form = reactive(initialForm())
 
-// 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
-const now = new Date()
-const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+// 한국 시간 기준 이번 달을 기본 조회 월로 사용한다.
+const month = ref(currentMonth())
 
 // 조회 버튼으로 확정한 월이다.
 // 페이지 이동과 저장·삭제 후 재조회에도 같은 월을 사용한다.
@@ -49,21 +49,6 @@ const appliedMonth = ref(month.value)
 // 일정 목록의 페이지 상태와 공통 처리 함수를 사용
 const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
   usePagination(5)
-
-/**
- * 브라우저의 로컬 날짜를 YYYY-MM-DD 형식으로 반환한다.
- * 신규 일정의 기본 시작일과 마감일로 사용한다.
- * UTC 문자열로 변환하지 않아 시간대 변환으로 날짜가 달라지는 것을 피한다.
- */
-function today(): string {
-  const date = new Date()
-
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-')
-}
 
 /**
  * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성

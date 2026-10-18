@@ -4,6 +4,7 @@ import { requestWithDemo } from '../api/client'
 import { createDemoData } from '../mocks/demoData'
 import { ChartPie, Search } from '@lucide/vue'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { currentMonth } from '../utils/date'
 
 // 카테고리별 지출 통계
 interface CategoryStatistics {
@@ -32,10 +33,10 @@ const isDemo = ref(false)
 
 // 화면에서 사용하는 데이터와 처리 상태다.
 const statistics = ref<Statistics | null>(null)
-const now = new Date() // 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
-const selectedMonth = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
 const loading = ref(false)
 const { errorMessage, showError } = useErrorMessage('통계 조회 중 오류가 발생했습니다.') // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
+// 한국 시간 기준 이번 달을 기본 조회 월로 사용한다.
+const month = ref(currentMonth())
 
 // 금액을 천 단위 쉼표로 표시한다.
 function formatAmount(amount: number | null) {
@@ -48,8 +49,8 @@ async function findStatistics() {
   isDemo.value = false
 
   const result = await requestWithDemo<Statistics>(
-    `/api/statistics/${selectedMonth.value}`,
-    () => createDemoData(selectedMonth.value).statistics,
+    `/api/statistics/${month.value}`,
+    () => createDemoData(month.value).statistics,
   )
 
   statistics.value = result.data
@@ -67,7 +68,7 @@ async function loadStatistics() {
   statistics.value = null
 
   // 조회 월이 YYYY-MM 형식인지 검사한다.
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth.value)) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month.value)) {
     errorMessage.value = '조회할 월을 선택해 주세요.'
     return
   }
@@ -110,7 +111,7 @@ onMounted(loadStatistics)
             조회 월
             <input
               id="statistics-month"
-              v-model="selectedMonth"
+              v-model="month"
               type="month"
               min="0001-01"
               max="9998-12"

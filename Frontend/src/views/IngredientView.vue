@@ -9,6 +9,7 @@ import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { today } from '../utils/date'
 
 type IngredientStorageLocation = 'REFRIGERATOR' | 'FREEZER' | 'PANTRY' // 식재료 보관 장소 상태값
 type IngredientStatus = 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태값
@@ -64,20 +65,9 @@ const form = reactive(initialForm())
 const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
 const { canModify } = useDemoGuard(isDemo) // canModify는 체험 상태에서 등록·수정 저장·삭제 요청을 진행하지 않도록 안내
 
-// 한국 기준 오늘의 연·월·일을 구하고, 날짜 비교용 UTC 자정 값으로 변환한다.
+// 한국 기준 오늘을 날짜 차이 계산에 사용할 UTC 자정 값으로 변환한다.
 const getToday = (): number => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-
-  const year = Number(parts.find((part) => part.type === 'year')!.value)
-  const month = Number(parts.find((part) => part.type === 'month')!.value)
-  const day = Number(parts.find((part) => part.type === 'day')!.value)
-
-  return Date.UTC(year, month - 1, day)
+  return new Date(`${today()}T00:00:00Z`).getTime()
 }
 
 // 선택 입력은 빈 문자열로 초기화하고, 저장할 때 null로 변환한다.

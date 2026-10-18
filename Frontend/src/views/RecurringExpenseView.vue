@@ -9,6 +9,7 @@ import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { today, currentMonth } from '../utils/date'
 
 // 카테고리 선택 목록이다.
 interface Category {
@@ -108,18 +109,6 @@ const selectedMonth = ref(currentMonth())
  * 초기화할 때는 객체를 교체하지 않고 Object.assign으로 속성값을 갱신
  */
 const form = reactive(initialForm())
-
-// 사용자 기기의 오늘 날짜를 YYYY-MM-DD 형식으로 반환한다.
-function todayDate() {
-  const date = new Date()
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-// UTC 변환 없이 사용자 PC 기준 현재 월을 구한다.
-function currentMonth() {
-  const date = new Date()
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
 
 /**
  * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성
@@ -358,13 +347,13 @@ async function changePayment(item: MonthlyPaymentItem) {
   // 선택창 값이 아니라 현재 표시된 목록의 월을 사용해 다른 월의 납부 처리를 방지한다.
   const month = monthly.value.month
   const cancel = item.paid
-  const paymentDate = paymentDates[item.id] ?? todayDate()
+  const paymentDate = paymentDates[item.id] ?? today()
 
   if (cancel) {
     if (!window.confirm(`"${item.title}" 납부를 취소할까요? 연결된 생활비도 삭제됩니다.`)) {
       return
     }
-  } else if (!paymentDate || paymentDate > todayDate()) {
+  } else if (!paymentDate || paymentDate > today()) {
     errorMessage.value = '납부일은 오늘 또는 이전 날짜로 입력해 주세요.'
     return
   }
@@ -919,8 +908,8 @@ onMounted(loadData)
                     v-else
                     class="payment-date-input"
                     type="date"
-                    :value="paymentDates[item.id] ?? todayDate()"
-                    :max="todayDate()"
+                    :value="paymentDates[item.id] ?? today()"
+                    :max="today()"
                     :disabled="saving"
                     :aria-label="`${item.title} 실제 납부일`"
                     @input="paymentDates[item.id] = ($event.target as HTMLInputElement).value"

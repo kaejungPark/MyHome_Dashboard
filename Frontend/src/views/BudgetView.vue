@@ -5,6 +5,7 @@ import { createDemoData } from '../mocks/demoData'
 import { Coins, Target, RefreshCw, Plus, Pencil, Trash2 } from '@lucide/vue' // 화면의 제목과 주요 동작에 사용할 아이콘
 import { useDemoGuard } from '../composables/useDemoGuard'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { currentMonth } from '../utils/date'
 
 // 월별 예산 조회 결과다.
 interface Budget {
@@ -19,9 +20,8 @@ interface Budget {
 const isDemo = ref(false)
 const { canModify } = useDemoGuard(isDemo)
 
-// 첫 화면에서는 사용자 PC의 현재 월을 조회한다.
-const now = new Date()
-const month = ref(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+// 한국 시간 기준 이번 달을 기본 조회 월로 사용한다.
+const month = ref(currentMonth())
 
 // 화면에서 사용하는 데이터와 처리 상태다.
 const budget = ref<Budget | null>(null) // 서버에서 조회한 예산

@@ -9,6 +9,7 @@ import { paginateDemo } from '../mocks/paginateDemo'
 import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import { today } from '../utils/date'
 
 type TaskType = 'CHORE' | 'CONSUMABLE'
 
@@ -94,19 +95,9 @@ function initialForm() {
 // 완료 처리에 필요한 입력값을 초기화한다.
 function completionForm() {
   return {
-    completedDate: todayText(),
+    completedDate: today(),
     memo: '',
   }
-}
-
-// 한국 시간을 기준으로 오늘 날짜를 반환한다.
-function todayText(): string {
-  return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Seoul',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date())
 }
 
 // 입력값과 수정 대상을 초기화한다.
@@ -380,7 +371,7 @@ async function completeTask() {
   errorMessage.value = ''
   notice.value = ''
 
-  if (!completion.completedDate || completion.completedDate > todayText()) {
+  if (!completion.completedDate || completion.completedDate > today()) {
     errorMessage.value = '완료일은 오늘 또는 과거 날짜로 입력해 주세요.'
     return
   }
@@ -758,19 +749,19 @@ onMounted(loadData)
               <td class="date-cell">
                 <span
                   :class="{
-                    'overdue-date': task.active && task.nextDueDate < todayText(),
+                    'overdue-date': task.active && task.nextDueDate < today(),
                   }"
                 >
                   {{ task.nextDueDate }}
                 </span>
                 <small
-                  v-if="task.active && task.nextDueDate < todayText()"
+                  v-if="task.active && task.nextDueDate < today()"
                   class="due-note overdue-date"
                 >
                   예정일 지남
                 </small>
                 <small
-                  v-else-if="task.active && task.nextDueDate === todayText()"
+                  v-else-if="task.active && task.nextDueDate === today()"
                   class="due-note today-date"
                 >
                   오늘 예정
@@ -855,7 +846,7 @@ onMounted(loadData)
                 v-model="completion.completedDate"
                 type="date"
                 min="0001-01-01"
-                :max="todayText()"
+                :max="today()"
                 required
               />
             </label>
