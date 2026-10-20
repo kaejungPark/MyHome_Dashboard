@@ -55,12 +55,11 @@ public class AuthController {
     }
 
     /**
-     * 현재 로그인한 사용자의 ID, 이메일, 닉네임을 반환한다.
+     * 현재 로그인한 사용자의 ID, 이메일, 닉네임, 권한을 반환한다.
      *
-     * @AuthenticationPrincipal은 Spring Security가 보관한 인증 정보에서
-     * LoginUser를 가져온다. 요청으로 사용자 ID를 전달받지 않는다.
-     * 매번 DB를 조회하는 방식이므로 오해하지 않도록,
-     * 반환 정보는 로그인 시 구성된 사용자 정보임을 명시한다.
+     * @AuthenticationPrincipal로 서버 세션에 보관된 LoginUser를 가져온다.
+     * 매 요청마다 DB를 조회하지 않고 로그인 시 구성된 정보를 반환한다.
+     * 권한은 USER 또는 ADMIN으로 전달한다.
      * 비로그인 요청은 Spring Security에서 401로 차단한다.
      */
     @GetMapping("/me")
@@ -71,7 +70,8 @@ public class AuthController {
                 new LoginResponse(
                         loginUser.getId(),
                         loginUser.getUsername(), // 로그인 식별자로 사용하는 이메일
-                        loginUser.getNickname()
+                        loginUser.getNickname(),
+                        loginUser.getRole()
                 )
         );
     }

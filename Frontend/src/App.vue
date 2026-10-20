@@ -20,6 +20,7 @@ interface LoginUser {
   id: number
   email: string
   nickname: string
+  role: 'USER' | 'ADMIN' // 사용자 권한
 }
 
 // 로그아웃 요청의 중복 실행을 방지한다.

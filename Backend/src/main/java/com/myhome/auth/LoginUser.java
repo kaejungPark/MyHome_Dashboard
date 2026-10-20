@@ -19,6 +19,9 @@ public class LoginUser extends User {
     // 화면에 표시할 닉네임이다.
     private final String nickname;
 
+    // 로그인한 사용자의 권한
+    private final String role;
+
     public LoginUser(AuthUser user) {
         super(
                 user.email(),          // 로그인 식별자로 이메일을 사용한다.
@@ -32,6 +35,7 @@ public class LoginUser extends User {
 
         this.id = user.id();
         this.nickname = user.nickname();
+        this.role = user.role();
     }
 
     public Long getId() {
@@ -41,4 +45,6 @@ public class LoginUser extends User {
     public String getNickname() {
         return nickname;
     }
+
+    public String getRole() { return role; }
 }

@@ -12,6 +12,12 @@ const router = createRouter({
       component: () => import('../views/DashboardView.vue'), // 대시보드
     },
     {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/AdminView.vue'), // 관리자 화면
+      meta: { requiresAdmin: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('../views/LoginView.vue'), // 로그인 경로
@@ -98,6 +104,50 @@ const router = createRouter({
   scrollBehavior() {
     return { top: 0 }
   },
+})
+
+/**
+ * 관리자 화면으로 이동하기 전에 서버 세션의 권한을 확인한다.
+ * 일반 화면은 그대로 허용하고, 관리자 화면은 ADMIN만 진입할 수 있다.
+ */
+router.beforeEach(async (to) => {
+  // 관리자 전용 화면이 아니면 권한 검사 없이 이동한다.
+  if (!to.meta.requiresAdmin) return true
+
+  try {
+    // 체험 데이터가 아닌 실제 로그인 정보를 확인한다.
+    const response = await fetch('/api/auth/me')
+
+    // 로그인하지 않았거나 세션이 만료되면 로그인 화면으로 이동한다.
+    if (response.status === 401) {
+      window.alert('로그인이 필요합니다.')
+      return { name: 'login' }
+    }
+
+    // 서버 오류는 비로그인 상태와 구분한다.
+    if (!response.ok) {
+      throw new Error('로그인 정보를 확인하지 못했습니다.')
+    }
+
+    const result = await response.json()
+
+    // 응답에 사용자 정보가 없으면 진입을 허용하지 않는다.
+    if (!result.success || !result.data) {
+      throw new Error('로그인 정보를 확인하지 못했습니다.')
+    }
+
+    // 일반 사용자는 대시보드로 이동한다.
+    if (result.data.role !== 'ADMIN') {
+      window.alert('관리자만 접근할 수 있는 화면입니다.')
+      return { name: 'dashboard' }
+    }
+
+    return true
+  } catch {
+    // 통신 오류 등으로 권한을 확인하지 못하면 이동을 취소한다.
+    window.alert('관리자 권한을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    return false
+  }
 })
 
 export default router

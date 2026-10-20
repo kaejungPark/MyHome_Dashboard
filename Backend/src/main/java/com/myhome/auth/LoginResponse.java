@@ -7,6 +7,7 @@ package com.myhome.auth;
 public record LoginResponse(
         Long id,
         String email,
-        String nickname
+        String nickname,
+        String role // 사용자 권한: USER(일반 사용자), ADMIN(관리자)
 ) {
 }
