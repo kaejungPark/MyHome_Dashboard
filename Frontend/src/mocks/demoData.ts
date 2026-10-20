@@ -557,6 +557,140 @@ export function createDemoData(selectedMonth?: string) {
       })),
   }
 
+  // 장보기 체험 데이터: 미구매·구매 완료·예정일 미지정 항목을 포함한다.
+  // 실제 구매일은 구매 완료 항목에만 설정한다.
+  const shoppingItems: {
+    id: number
+    name: string
+    quantity: number
+    unit: string
+    isCompleted: boolean
+    completedDate: string | null
+    purchaseDueDate: string | null
+    memo: string | null
+  }[] = [
+    {
+      id: 712,
+      name: '우유',
+      quantity: 2,
+      unit: '팩',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: today,
+      memo: '유통 용량 확인하고 구매',
+    },
+    {
+      id: 711,
+      name: '계란',
+      quantity: 1,
+      unit: '판',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: today,
+      memo: null,
+    },
+    {
+      id: 710,
+      name: '세탁 세제',
+      quantity: 1,
+      unit: '개',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: addDays(today, 1),
+      memo: '리필 제품으로 구매',
+    },
+    {
+      id: 709,
+      name: '닭가슴살',
+      quantity: 1.5,
+      unit: 'kg',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: addDays(today, 1),
+      memo: '소분해서 냉동 보관',
+    },
+    {
+      id: 708,
+      name: '두부',
+      quantity: 2,
+      unit: '모',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: addDays(today, 3),
+      memo: null,
+    },
+    {
+      id: 707,
+      name: '휴지',
+      quantity: 1,
+      unit: '묶음',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: addDays(today, 7),
+      memo: '남은 수량 확인 후 구매',
+    },
+    {
+      id: 706,
+      name: '주방 세제',
+      quantity: 1,
+      unit: '개',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: null,
+      memo: '예정일 미지정 테스트',
+    },
+    {
+      id: 705,
+      name: '지퍼백',
+      quantity: 1,
+      unit: '상자',
+      isCompleted: false,
+      completedDate: null,
+      purchaseDueDate: addDays(today, -1),
+      memo: '구매 예정일이 지난 미구매 항목',
+    },
+    {
+      id: 704,
+      name: '쌀',
+      quantity: 5,
+      unit: 'kg',
+      isCompleted: true,
+      completedDate: today,
+      purchaseDueDate: today,
+      memo: '구매 완료',
+    },
+    {
+      id: 703,
+      name: '생수',
+      quantity: 6,
+      unit: '병',
+      isCompleted: true,
+      completedDate: addDays(today, -1),
+      purchaseDueDate: today,
+      memo: '예정일보다 하루 먼저 구매',
+    },
+    {
+      id: 702,
+      name: '바나나',
+      quantity: 1,
+      unit: '송이',
+      isCompleted: true,
+      completedDate: addDays(today, -1),
+      purchaseDueDate: addDays(today, -2),
+      memo: '예정일보다 하루 늦게 구매',
+    },
+    {
+      id: 701,
+      name: '수세미',
+      quantity: 3,
+      unit: '개',
+      isCompleted: true,
+      completedDate: addDays(today, -3),
+      purchaseDueDate: null,
+      memo: '예정일 없이 구매한 항목',
+    },
+  ]
+
   return {
     categories,
     expenses,
@@ -571,6 +705,7 @@ export function createDemoData(selectedMonth?: string) {
     ingredients,
     householdTasks,
     householdTaskHistories,
+    shoppingItems,
   }
 }
 

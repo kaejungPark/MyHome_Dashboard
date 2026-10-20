@@ -47,6 +47,11 @@ const router = createRouter({
       component: () => import('../views/HouseholdTaskView.vue'), // 집안일·소모품
     },
     {
+      path: '/shopping-items',
+      name: 'shopping-items',
+      component: () => import('../views/ShoppingView.vue'), // 장보기
+    },
+    {
       path: '/ingredients',
       name: 'ingredients',
       component: () => import('../views/IngredientView.vue'), // 식재료

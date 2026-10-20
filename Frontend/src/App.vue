@@ -32,6 +32,7 @@ const myHomeMenus = [
   { path: '/recurring-expenses', label: '고정 지출' },
   { path: '/schedules', label: '일정' },
   { path: '/household-tasks', label: '집안일·소모품' },
+  { path: '/shopping-items', label: '장보기' },
   { path: '/ingredients', label: '식재료' },
   { path: '/items', label: '물품' },
 ]
