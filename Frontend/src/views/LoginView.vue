@@ -89,7 +89,7 @@ async function submitLogin() {
               id="login-email"
               v-model="email"
               name="email"
-              type="email"
+              :type="email.trim() === 'admin' ? 'text' : 'email'"
               autocomplete="username"
               placeholder="이메일을 입력해 주세요"
               maxlength="254"

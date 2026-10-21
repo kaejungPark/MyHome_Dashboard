@@ -4,6 +4,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface AuthMapper {
@@ -79,4 +80,14 @@ public interface AuthMapper {
             @Param("age") Integer age,
             @Param("gender") String gender
     );
+
+    /**
+     * 로그인에 성공한 사용자의 마지막 로그인 시간을 UTC 기준으로 갱신한다.
+     */
+    @Update("""
+        UPDATE dbo.[USER]
+        SET LAST_LOGIN_DT = SYSUTCDATETIME()
+        WHERE ID = #{userId}
+    """)
+    int updateLastLoginDt(@Param("userId") Long userId);
 }

@@ -23,6 +23,12 @@ interface LoginUser {
   role: 'USER' | 'ADMIN' // 사용자 권한
 }
 
+// 서버에서 확인한 권한이 ADMIN인 경우에만 관리자 메뉴를 표시한다.
+const isAdmin = computed(() => loginUser.value?.role === 'ADMIN')
+
+// 관리자 경로에서는 왼쪽에 관리자 전용 메뉴를 표시한다.
+const isAdminPage = computed(() => route.path === '/admin' || route.path.startsWith('/admin/'))
+
 // 로그아웃 요청의 중복 실행을 방지한다.
 const loggingOut = ref(false)
 
@@ -190,6 +196,15 @@ onUnmounted(() => {
           <RouterLink to="community" class="nav-link" exact-active-class="is-active">
             커뮤니티
           </RouterLink>
+          <!-- 관리자만 접근할 수 있는 화면의 진입 메뉴다. -->
+          <RouterLink
+            v-if="isAdmin"
+            to="/admin"
+            class="nav-link"
+            :class="{ 'is-active': isAdminPage }"
+          >
+            관리자
+          </RouterLink>
         </nav>
 
         <div class="header-date">
@@ -249,7 +264,17 @@ onUnmounted(() => {
             </div>
           </template>
         </section>
-        <section class="guide-card">
+        <!-- 관리자 화면에서는 회원 카드 아래에 관리 메뉴를 표시한다. -->
+        <section v-if="isAdmin && isAdminPage" class="admin-menu-card">
+          <h2>관리자 메뉴</h2>
+
+          <nav class="admin-side-nav" aria-label="관리자 메뉴">
+            <RouterLink to="/admin" class="admin-side-link" exact-active-class="is-current">
+              관리자 대시보드
+            </RouterLink>
+          </nav>
+        </section>
+        <section v-if="!(isAdmin && isAdminPage)" class="guide-card">
           <Lightbulb :size="24" aria-hidden="true" />
           <div>
             <h2>생활을 한곳에서</h2>
@@ -657,5 +682,50 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr);
     padding: 24px 16px;
   }
+}
+
+/* 기존 회원 카드와 동일한 테두리와 배경으로 관리 메뉴를 구성한다. */
+.admin-menu-card {
+  padding: 20px;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  background-color: #fff;
+}
+
+.admin-menu-card h2 {
+  margin: 0 0 14px;
+  color: #1e293b;
+  font-size: 16px;
+}
+
+.admin-side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin-side-link {
+  display: block;
+  padding: 11px 12px;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.admin-side-link:hover {
+  background-color: #f8fafc;
+  color: #2563eb;
+}
+
+.admin-side-link.is-current {
+  background-color: #eaf1ff;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.admin-side-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 </style>

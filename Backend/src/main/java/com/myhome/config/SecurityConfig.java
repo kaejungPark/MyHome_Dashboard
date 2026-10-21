@@ -1,6 +1,5 @@
 package com.myhome.config;
 
-import jakarta.servlet.http.HttpServlet;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -15,7 +14,8 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import com.myhome.auth.AuthUserDetailsService;
-
+import com.myhome.auth.AuthMapper;
+import com.myhome.auth.LoginUser;
 
 /**
  * API 접근 규칙과 비밀번호 해시 처리 방식을 설정한다.
@@ -32,7 +32,8 @@ public class SecurityConfig  {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            AuthenticationManager authenticationManager
+            AuthenticationManager authenticationManager,
+            AuthMapper authMapper
     ) throws Exception {
 
         http
@@ -71,13 +72,19 @@ public class SecurityConfig  {
                         .usernameParameter("email")
                         .passwordParameter("password")
 
-                        // 로그인 성공 시 페이지 이동 대신 JSON을 반환한다.
+                        // 로그인 성공 시 마지막 로그인 시간을 갱신하고 JSON 응답을 반환한다.
                         .successHandler((request, response, authentication) -> {
+                            // 인증이 완료된 사용자 정보에서 사용자 ID를 가져온다.
+                            LoginUser loginUser = (LoginUser) authentication.getPrincipal();
+
+                            // 비밀번호 검증에 성공한 경우에만 마지막 로그인 시간을 갱신한다.
+                            authMapper.updateLastLoginDt(loginUser.getId());
+
                             response.setStatus(200);
                             response.setContentType("application/json;charset=UTF-8");
                             response.getWriter().write("""
-                                {"success":true,"data":null,"message":null}
-                                """);
+                            {"success":true,"data":null,"message":null}
+                            """);
                         })
 
                         // 계정 존재 여부와 관계없이 동일한 실패 메시지를 반환한다.

@@ -51,4 +51,6 @@ public class AdminCommunityController {
         adminCommunityService.processReport(loginUser.getId(), id, request);
         return ApiResponse.success(null);
     }
+
+
 }

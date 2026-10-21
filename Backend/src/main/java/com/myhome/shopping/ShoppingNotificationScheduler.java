@@ -22,7 +22,7 @@ public class ShoppingNotificationScheduler {
      * 매일 한국 시간 오전 9시에 장보기 알림 처리를 시작한다.
      * 백엔드가 중지된 동안 놓친 실행은 자동으로 보충하지 않는다.
      */
-    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 03 12 * * *", zone = "Asia/Seoul")
     public void sendDailyNotifications() {
         log.info("장보기 알림 정기 처리 시작");
 
