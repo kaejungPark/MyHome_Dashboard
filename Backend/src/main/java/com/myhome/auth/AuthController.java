@@ -7,6 +7,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
+import org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler;
 
 /**
  * 회원가입, CSRF 토큰 조회, 로그인 사용자 조회 API를 제공한다.
@@ -18,6 +27,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final AuthService authService;
+    // 변경된 인증 정보를 현재 HTTP 세션에 명시적으로 저장한다.
+    private final HttpSessionSecurityContextRepository securityContextRepository =
+            new HttpSessionSecurityContextRepository();
 
     public AuthController (AuthService authService) {
         this.authService = authService;
@@ -74,5 +86,83 @@ public class AuthController {
                         loginUser.getRole()
                 )
         );
+    }
+
+    /**
+     * GET /api/auth/profile: 로그인한 사용자의 회원 정보를 조회한다.
+     * 요청에서 사용자 ID를 받지 않고 로그인 세션의 ID를 사용한다.
+     * 세션의 요약 정보가 아닌 DB에 저장된 회원 정보를 반환한다.
+     */
+    @GetMapping("/profile")
+    public ApiResponse<ProfileResponse> getProfile(
+            @AuthenticationPrincipal LoginUser loginUser
+    ) {
+        return ApiResponse.success(
+                authService.getProfile(loginUser.getId())
+        );
+    }
+
+    /**
+     * PUT /api/auth/profile: 본인의 일반 회원 정보를 수정한다.
+     * DB 저장 완료 후 현재 세션의 닉네임도 갱신한다.
+     */
+    @PutMapping("/profile")
+    public ApiResponse<Void> updateProfile(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @Valid @RequestBody ProfileUpdateRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
+    ) {
+        // 서비스 호출이 정상 종료되면 DB 트랜잭션도 완료된 상태다.
+        String nickname = authService.updateProfile(loginUser.getId(), request);
+
+        LoginUser updatedUser = loginUser.withNickname(nickname);
+
+        UsernamePasswordAuthenticationToken updatedAuthentication =
+                new UsernamePasswordAuthenticationToken(
+                        updatedUser,
+                        null,
+                        authentication.getAuthorities()
+                );
+
+        updatedAuthentication.setDetails(authentication.getDetails());
+
+        // 기존 공유 컨텍스트를 직접 수정하지 않고 새 컨텍스트로 교체한다.
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(updatedAuthentication);
+
+        SecurityContextHolder.setContext(context);
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        return ApiResponse.success(null);
+    }
+
+    /**
+     * PUT /api/auth/password: 현재 비밀번호를 확인하고 새 비밀번호로 변경한다.
+     * 저장 완료 후 현재 세션과 인증 정보를 제거한다.
+     */
+    @PutMapping("/password")
+    public ApiResponse<Void> changePassword(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @Valid @RequestBody PasswordChangeRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
+    ) {
+        // 저장 실패 시 예외가 발생하므로 아래 로그아웃 처리는 실행되지 않는다.
+        authService.changePassword(loginUser.getId(), request);
+
+        // 현재 세션을 무효화하고 SecurityContext의 인증 정보를 제거한다.
+        SecurityContextLogoutHandler logoutHandler =
+                new SecurityContextLogoutHandler();
+
+        logoutHandler.logout(httpRequest, httpResponse, authentication);
+
+        // 브라우저에 남은 현재 세션 쿠키도 제거한다.
+        new CookieClearingLogoutHandler("JSESSIONID")
+                .logout(httpRequest, httpResponse, authentication);
+
+        return ApiResponse.success(null);
     }
 }

@@ -47,4 +47,33 @@ public class LoginUser extends User {
     }
 
     public String getRole() { return role; }
+
+    /**
+     * 기존 인증 정보와 권한은 유지하면서 닉네임만 변경한다.
+     * 세션 갱신을 위해 비밀번호 해시를 다시 저장하지 않는다.
+     */
+    private LoginUser(LoginUser source, String nickname) {
+        super(
+                source.getUsername(),
+                "",
+                source.isEnabled(),
+                source.isAccountNonExpired(),
+                source.isCredentialsNonExpired(),
+                source.isAccountNonLocked(),
+                source.getAuthorities()
+        );
+
+        this.id = source.id;
+        this.nickname = nickname;
+        this.role = source.role;
+
+        eraseCredentials();
+    }
+
+    /**
+     * 변경된 닉네임을 가진 새 로그인 사용자 정보를 반환한다.
+     */
+    public LoginUser withNickname(String nickname) {
+        return new LoginUser(this, nickname);
+    }
 }

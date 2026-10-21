@@ -18,6 +18,19 @@ const router = createRouter({
       meta: { requiresAdmin: true },
     },
     {
+      path: '/admin/reports',
+      name: 'admin-reports',
+      component: () => import('../views/AdminReportView.vue'),
+      // 기존 라우터 가드에서 관리자 권한을 검사한다.
+      meta: { requiresAdmin: true },
+    },
+    {
+      path: '/admin/hidden-communities',
+      name: 'admin-hidden-communities',
+      component: () => import('../views/AdminHiddenCommunityView.vue'),
+      meta: { requiresAdmin: true },
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('../views/LoginView.vue'), // 로그인 경로
@@ -26,6 +39,11 @@ const router = createRouter({
       path: '/signup',
       name: 'signup',
       component: () => import('../views/SignupView.vue'), // 회원가입
+    },
+    {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('../views/ProfileView.vue'),
     },
     {
       path: '/expenses',

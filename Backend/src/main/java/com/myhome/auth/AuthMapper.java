@@ -90,4 +90,78 @@ public interface AuthMapper {
         WHERE ID = #{userId}
     """)
     int updateLastLoginDt(@Param("userId") Long userId);
+
+    /**
+     * 로그인한 사용자의 ID로 회원 정보를 조회한다.
+     * 비밀번호 해시는 조회하지 않는다.
+     */
+    @Select("""
+    SELECT
+        EMAIL AS email,
+        NAME AS name,
+        NICKNAME AS nickname,
+        AGE AS age,
+        GENDER AS gender
+    FROM dbo.[USER]
+    WHERE ID = #{userId}
+    """)
+    ProfileResponse findProfile(@Param("userId") Long userId);
+
+    /**
+     * 회원 정보 수정과 비밀번호 검증에 필요한 사용자 정보를 조회한다.
+     * 비밀번호 해시는 서버 내부에서만 사용한다.
+     */
+    @Select("""
+    SELECT
+        ID AS id,
+        EMAIL AS email,
+        PASSWORD_HASH AS passwordHash,
+        NICKNAME AS nickname,
+        ROLE AS role,
+        STATUS AS status
+    FROM dbo.[USER]
+    WHERE ID = #{userId}
+    """)
+    AuthUser findById(@Param("userId") Long userId);
+
+    /**
+     * 활성 계정의 일반 회원 정보만 수정한다.
+     * 이메일, 비밀번호, 권한, 계정 상태는 변경하지 않는다.
+     */
+    @Update("""
+    UPDATE dbo.[USER]
+    SET NAME = #{name,jdbcType=NVARCHAR},
+        NICKNAME = #{nickname,jdbcType=NVARCHAR},
+        AGE = #{age,jdbcType=INTEGER},
+        GENDER = #{gender,jdbcType=VARCHAR},
+        UPDATED_DT = SYSUTCDATETIME()
+    WHERE ID = #{userId}
+      AND STATUS = 'ACTIVE'
+    """)
+    int updateProfile(
+            @Param("userId") Long userId,
+            @Param("name") String name,
+            @Param("nickname") String nickname,
+            @Param("age") Integer age,
+            @Param("gender") String gender
+    );
+
+    /**
+     * 검증에 사용한 비밀번호 해시가 그대로인 경우에만 변경한다.
+     * 동시에 들어온 다른 변경 요청이 먼저 처리됐다면 0을 반환한다.
+     */
+    @Update("""
+    UPDATE dbo.[USER]
+    SET PASSWORD_HASH = #{newPasswordHash},
+        UPDATED_DT = SYSUTCDATETIME()
+    WHERE ID = #{userId}
+      AND STATUS = 'ACTIVE'
+      AND PASSWORD_HASH COLLATE Latin1_General_100_BIN2
+          = #{oldPasswordHash}
+    """)
+    int updatePassword(
+            @Param("userId") Long userId,
+            @Param("oldPasswordHash") String oldPasswordHash,
+            @Param("newPasswordHash") String newPasswordHash
+    );
 }

@@ -142,12 +142,14 @@ onMounted(() => {
   }, 60_000)
 
   document.addEventListener('click', closeMenuOutside)
+  window.addEventListener('profile-updated', loadLoginUser)
 })
 
 // 화면 해제 시 타이머와 이벤트를 제거한다.
 onUnmounted(() => {
   if (dateTimer !== undefined) clearInterval(dateTimer)
   document.removeEventListener('click', closeMenuOutside)
+  window.removeEventListener('profile-updated', loadLoginUser)
 })
 </script>
 <template>
@@ -238,7 +240,11 @@ onUnmounted(() => {
           </p>
 
           <template v-else-if="loginUser">
-            <h2>{{ loginUser.nickname }}님</h2>
+            <h2>
+              <RouterLink to="/profile" class="member-profile-link" aria-label="내 회원 정보 수정">
+                {{ loginUser.nickname }}님
+              </RouterLink>
+            </h2>
             <p class="member-description">오늘도 MyHome과 함께 생활을 관리하세요.</p>
 
             <button type="button" class="login-button" :disabled="loggingOut" @click="logout">
@@ -271,6 +277,16 @@ onUnmounted(() => {
           <nav class="admin-side-nav" aria-label="관리자 메뉴">
             <RouterLink to="/admin" class="admin-side-link" exact-active-class="is-current">
               관리자 대시보드
+            </RouterLink>
+            <RouterLink to="/admin/reports" class="admin-side-link" exact-active-class="is-current">
+              신고 관리
+            </RouterLink>
+            <RouterLink
+              to="/admin/hidden-communities"
+              class="admin-side-link"
+              exact-active-class="is-current"
+            >
+              숨김 게시글
             </RouterLink>
           </nav>
         </section>
@@ -727,5 +743,21 @@ button:disabled {
 .admin-side-link:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
+}
+
+.member-profile-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.member-profile-link:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.member-profile-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 4px;
+  border-radius: 3px;
 }
 </style>
