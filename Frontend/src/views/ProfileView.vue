@@ -14,6 +14,8 @@ interface ProfileResponse {
   nickname: string
   age: number | null
   gender: Gender | null
+  emailVerified: boolean
+  emailNotificationEnabled: boolean
 }
 
 const router = useRouter()
@@ -25,13 +27,16 @@ const notice = ref('')
 
 const { errorMessage, showError } = useErrorMessage('회원 정보를 처리하지 못했습니다.')
 
-// 이메일은 조회만 가능하며 수정 요청에 포함하지 않는다.
+// 이메일과 인증 상태는 조회만 한다.
+// 수신 동의는 다른 회원 정보와 함께 저장한다.
 const form = reactive({
   email: '',
   name: '',
   nickname: '',
   age: '' as number | '',
   gender: '' as Gender | '',
+  emailVerified: false,
+  emailNotificationEnabled: false,
 })
 
 // 비밀번호 변경은 회원 정보 수정과 별도의 상태로 관리한다.
@@ -50,15 +55,16 @@ const { errorMessage: passwordError, showError: showPasswordError } =
 
 const busy = computed(() => loading.value || saving.value || changingPassword.value)
 
-// 서버 응답을 회원 정보 폼에 반영한다.
+// DB에 저장된 회원 정보와 수신 동의 상태를 폼에 반영한다.
 function applyProfile(profile: ProfileResponse) {
   form.email = profile.email
   form.name = profile.name ?? ''
   form.nickname = profile.nickname
   form.age = profile.age ?? ''
   form.gender = profile.gender ?? ''
+  form.emailVerified = profile.emailVerified
+  form.emailNotificationEnabled = profile.emailNotificationEnabled
 }
-
 /**
  * DB에 저장된 본인의 회원 정보를 조회한다.
  * 세션이 만료된 경우 로그인 화면으로 이동한다.
@@ -92,8 +98,8 @@ async function loadData() {
 }
 
 /**
- * 일반 회원 정보만 저장한다.
- * 비밀번호와 이메일은 이 요청에서 변경하지 않는다.
+ * 일반 회원 정보와 이메일 알림 수신 동의를 저장한다.
+ * 이메일 주소·인증 상태·비밀번호는 이 요청에서 변경하지 않는다.
  */
 async function saveProfile() {
   if (busy.value || !loaded.value) return
@@ -130,6 +136,7 @@ async function saveProfile() {
         nickname,
         age: form.age === '' ? null : form.age,
         gender: form.gender === '' ? null : form.gender,
+        emailNotificationEnabled: form.emailNotificationEnabled,
       }),
     })
 
@@ -348,6 +355,28 @@ onMounted(loadData)
               <option value="FEMALE">여성</option>
             </select>
           </label>
+
+          <div class="notification-settings">
+            <label class="notification-checkbox" for="profile-email-notification">
+              <input
+                id="profile-email-notification"
+                v-model="form.emailNotificationEnabled"
+                type="checkbox"
+                aria-describedby="profile-notification-help"
+              />
+
+              <span>이메일 알림 수신에 동의합니다. (선택)</span>
+            </label>
+
+            <p id="profile-notification-help" class="field-help">
+              장보기 예정 알림을 이메일로 받습니다. 변경한 내용은 저장 버튼을 누르면 반영됩니다.
+            </p>
+
+            <p v-if="!form.emailVerified" class="notification-note">
+              현재 계정은 이메일 미인증 상태입니다. 수신에 동의하더라도 인증을 완료하기 전에는
+              알림이 발송되지 않습니다.
+            </p>
+          </div>
         </div>
 
         <div class="form-actions">
@@ -505,6 +534,48 @@ onMounted(loadData)
 
 .password-error {
   margin-top: 16px;
+}
+
+/* 공통 form-grid의 세로 label 배치를 체크박스 영역에서만 변경한다. */
+.profile-page .form-grid .notification-checkbox {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.notification-checkbox input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: #2563eb;
+}
+
+.notification-checkbox span {
+  line-height: 1.6;
+}
+
+.notification-settings {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.notification-settings .field-help {
+  margin: 0;
+}
+
+.notification-note {
+  margin: 0;
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 @media (max-width: 560px) {

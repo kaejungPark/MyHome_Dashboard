@@ -140,4 +140,118 @@ public class EmailVerificationCodeSupport {
                 HexFormat.of().parseHex(inputHash)
         );
     }
+
+    /**
+     * 가입 전 인증번호의 HMAC을 생성한다.
+     * 아직 회원 ID가 없으므로 이메일·요청 ID·인증번호를 사용한다.
+     */
+    public String createSignupHash(
+            String email,
+            UUID requestId,
+            String code
+    ) {
+        if (email == null || email.isBlank() || requestId == null) {
+            throw new IllegalArgumentException(
+                    "가입 전 인증 정보가 올바르지 않습니다."
+            );
+        }
+
+        if (code == null || !code.matches("[0-9]{6}")) {
+            throw new IllegalArgumentException(
+                    "인증번호는 숫자 6자리여야 합니다."
+            );
+        }
+
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+
+        // 기존 회원 인증 해시와 구분하기 위해 용도를 함께 포함한다.
+        String payload =
+                "SIGNUP\n" + normalizedEmail + "\n" + requestId + "\n" + code;
+
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
+            mac.init(secretKey);
+
+            return HexFormat.of().formatHex(
+                    mac.doFinal(payload.getBytes(StandardCharsets.UTF_8))
+            );
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException(
+                    "가입 전 인증번호 해시를 생성하지 못했습니다.",
+                    exception
+            );
+        }
+    }
+
+    /**
+     * 입력한 가입 전 인증번호와 저장된 해시가 일치하는지 확인한다.
+     */
+    public boolean matchesSignupCode(
+            String email,
+            UUID requestId,
+            String code,
+            String storedHash
+    ) {
+        if (code == null || !code.matches("[0-9]{6}")) {
+            return false;
+        }
+
+        if (storedHash == null || !storedHash.matches("[0-9a-f]{64}")) {
+            return false;
+        }
+
+        String inputHash = createSignupHash(email, requestId, code);
+
+        return MessageDigest.isEqual(
+                HexFormat.of().parseHex(storedHash),
+                HexFormat.of().parseHex(inputHash)
+        );
+    }
+
+    /**
+     * 인증 성공 후 회원가입에 사용할 일회용 확인값을 생성한다.
+     * 32바이트 난수를 URL 안전 Base64로 변환하면 43자리 문자열이 된다.
+     */
+    public String generateVerificationToken() {
+        byte[] bytes = new byte[32];
+        secureRandom.nextBytes(bytes);
+
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(bytes);
+    }
+
+    /**
+     * 충분히 긴 난수로 만든 가입 확인값을 SHA-256으로 해시 처리한다.
+     * 원본 확인값은 클라이언트에 반환하고 DB에는 해시만 저장한다.
+     */
+    public String hashVerificationToken(String verificationToken) {
+        if (verificationToken == null
+                || !verificationToken.matches("[A-Za-z0-9_-]{43}")) {
+            throw new IllegalArgumentException(
+                    "가입 인증 확인값이 올바르지 않습니다."
+            );
+        }
+
+        return sha256(verificationToken);
+    }
+
+    /**
+     * 문자열의 SHA-256 해시를 생성한다.
+     * 가입 확인값 저장과 이메일별 잠금 이름 생성에 사용한다.
+     */
+    public String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+            return HexFormat.of().formatHex(
+                    digest.digest(value.getBytes(StandardCharsets.UTF_8))
+            );
+        } catch (GeneralSecurityException exception) {
+            throw new IllegalStateException(
+                    "SHA-256 해시를 생성하지 못했습니다.",
+                    exception
+            );
+        }
+    }
 }

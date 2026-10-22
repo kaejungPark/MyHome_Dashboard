@@ -13,8 +13,9 @@ import java.util.List;
 public interface ShoppingNotificationMapper {
 
     /**
-     * 활성 회원의 미구매 항목 중 구매 예정일이 오늘 또는 내일인 항목을 조회한다.
-     * 사용자별로 묶어 발송할 수 있도록 수신 이메일과 물품 정보를 함께 반환한다.
+     * 활성 회원 중 이메일 인증을 완료하고 알림 수신에 동의한 회원을 대상으로,
+     * 구매 예정일이 오늘 또는 내일인 미구매 항목을 조회한다.
+     * 사용자별로 묶어 이메일을 발송한다.
      */
     @Select("""
        SELECT
@@ -30,6 +31,8 @@ public interface ShoppingNotificationMapper {
        WHERE s.IS_COMPLETED = 0
         AND s.PURCHASE_DUE_DATE IN (#{today}, #{tomorrow})
         AND u.STATUS = 'ACTIVE'
+        AND u.EMAIL_VERIFIED_DT IS NOT NULL
+        AND u.EMAIL_NOTIFICATION_ENABLED = 1
        ORDER BY s.USER_ID ASC, s.PURCHASE_DUE_DATE ASC, s.ID ASC
     """)
     List<ShoppingNotificationTarget> findTargets(

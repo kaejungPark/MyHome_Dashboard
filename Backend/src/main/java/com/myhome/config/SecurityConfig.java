@@ -40,14 +40,17 @@ public class SecurityConfig  {
                 // 기존에 만든 DB 조회·비밀번호 검증 설정을 사용한다.
                 .authenticationManager(authenticationManager)
 
-                // 회원가입·로그인·CSRF 조회는 비로그인 사용자에게도 허용한다.
-                // permitAll()은 인증 요구만 해제하며 CSRF 검사를 생략하지 않는다.
-                // 그 외 API는 로그인한 사용자만 접근할 수 있다.
+                // 회원가입·가입 전 이메일 인증·로그인·CSRF 조회는 비로그인 사용자에게도 허용한다.
+                // 관리자 API는 ADMIN 권한이 필요하고, 그 외 API는 로그인이 필요하다.
                 .authorizeHttpRequests(auth -> auth
+                        // 회원가입·로그인·가입 전 이메일 인증은 비로그인 사용자도 호출할 수 있다.
+                        // permitAll()은 로그인 요구만 해제하며 CSRF 검사는 그대로 유지한다.
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/auth/signup",
-                                "/api/auth/login"
+                                "/api/auth/login",
+                                "/api/auth/signup/email-verifications/send",
+                                "/api/auth/signup/email-verifications/confirm"
                         ).permitAll()
                         // CSRF 토큰과 커뮤니티 목록·상세 조회는 비로그인 사용자도 접근할 수 있다.
                         .requestMatchers(
