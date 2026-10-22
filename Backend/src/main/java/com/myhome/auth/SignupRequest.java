@@ -37,6 +37,23 @@ public record SignupRequest(
                 regexp = "MALE|FEMALE",
                 message = "올바른 성별을 선택해 주세요."
         )
-        String gender
+        String gender,
+
+        // 가입 전 이메일 인증 성공 응답에서 받은 일회용 확인값이다.
+        // 실제 이메일 일치 여부·만료·재사용 여부는 서비스에서 검증한다.
+        @NotBlank(message = "이메일 인증을 완료해 주세요.")
+        @Pattern(
+                regexp = "[A-Za-z0-9_-]{43}",
+                message = "이메일 인증 확인값이 올바르지 않습니다."
+        )
+                String emailVerificationToken,
+
+        // 선택 동의 항목이다. 미전달 또는 null이면 미동의로 저장한다.
+        Boolean emailNotificationEnabled
 ) {
+        // 비밀번호와 인증 확인값이 로그에 노출되지 않도록 한다.
+        @Override
+        public String toString() {
+                return "SignupRequest[redacted]";
+        }
 }

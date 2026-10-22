@@ -10,6 +10,7 @@ public record ProfileResponse(
         String nickname,        // 화면에 표시할 닉네임
         Integer age,            // 나이 — 미입력 시 null
         String gender,          // 성별 — 미입력 시 null
-        boolean emailVerified   // 이메일 인증 완료 여부
+        boolean emailVerified , // 이메일 인증 완료 여부
+        boolean emailNotificationEnabled    // 이메일 알림 수신 동의 여부
 ) {
 }

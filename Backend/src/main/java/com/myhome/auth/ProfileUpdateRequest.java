@@ -22,6 +22,10 @@ public record ProfileUpdateRequest(
                 regexp = "MALE|FEMALE",
                 message = "올바른 성별을 선택해 주세요."
         )
-        String gender
+        String gender,
+
+        // 동의와 미동의 모두 허용하지만 요청에서 값을 빠뜨리면 거절한다.
+        @NotNull(message = "이메일 알림 수신 여부를 선택해 주세요.")
+        Boolean emailNotificationEnabled
 ) {
 }

@@ -7,6 +7,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import com.myhome.email.signup.SignupEmailService;
+import org.springframework.dao.DuplicateKeyException;
+
+import java.time.LocalDateTime;
 
 @Service
 public class AuthService {
@@ -16,39 +20,41 @@ public class AuthService {
     // SecurityConfig에 등록한 비밀번호 해시 처리 도구다.
     private final PasswordEncoder passwordEncoder;
 
+    // 가입 전 이메일 인증 확인값을 검증하고 사용 완료 처리한다.
+    private final SignupEmailService signupEmailService;
 
-    public AuthService(AuthMapper authMapper, PasswordEncoder passwordEncoder) {
+    public AuthService(AuthMapper authMapper, PasswordEncoder passwordEncoder, SignupEmailService signupEmailService) {
         this.authMepper = authMapper;
         this.passwordEncoder = passwordEncoder;
+        this.signupEmailService = signupEmailService;
     }
 
     /**
-     * 이메일 중복과 비밀번호 길이를 확인하고 회원 정보를 저장한다.
-     * 비밀번호는 BCrypt 해시로, 미입력한 이름은 null로 저장한다.
-     * 이 메서드는 회원가입만 처리하며 로그인 세션을 생성하지 않는다.
+     * 가입 전 이메일 인증을 검증하고 회원 정보를 저장한다.
+     * 인증 확인값 사용 처리와 회원 저장은 같은 트랜잭션에서 실행한다.
+     * 회원 저장이 실패하면 확인값 사용 처리도 함께 롤백된다.
      */
     @Transactional
     public void signup(SignupRequest request) {
 
-        // 이메일과 닉네임의 앞뒤 공백을 제거한다.
-        String email = request.email().trim();
+        // 인증번호 발송·확인 단계와 동일한 방식으로 이메일을 정규화한다.
+        String email = SignupEmailService.normalizeEmail(request.email());
         String nickname = request.nickname().trim();
 
-        // 이름은 선택 입력이며 닉네임과 별도로 저장한다.
+        // 이름은 선택 입력이며 공백만 입력했다면 null로 저장한다.
         String name = request.name() == null || request.name().isBlank()
                 ? null
                 : request.name().trim();
 
-        // 이미 가입된 이메일이면 등록하지 않는다.
-        if (authMepper.existsByEmail(email))  {
+        // 이미 가입된 이메일이면 인증 확인값을 사용하기 전에 거절한다.
+        if (authMepper.existsByEmail(email)) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
                     "이미 사용 중인 이메일입니다."
             );
         }
 
-        // BCrypt는 최대 72바이트까지 처리하므로 UTF-8 기준으로 검사한다.
-        // 비밀번호는 공백도 입력값의 일부이므로 trim하지 않는다.
+        // 비밀번호의 공백도 실제 입력값이므로 trim하지 않는다.
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -56,25 +62,48 @@ public class AuthService {
             );
         }
 
-        // 원문 비밀번호 대신 해시 문자열을 저장한다.
+        // 인증 이력 잠금을 잡기 전에 비밀번호 해시를 생성한다.
         String passwordHash = passwordEncoder.encode(request.password());
 
-        /**
-         * 이름·나이·성별은 미입력 시 NULL로 저장한다.
-         * 비밀번호는 해시만 저장하며, 가입 계정의 권한과 상태는 USER·ACTIVE로 지정한다.
-         */
-        int insertRow = authMepper.insert(
-                email,
-                passwordHash,
-                name,
-                nickname,
-                request.age(),
-                request.gender()
-        );
+        // 이메일 일치·인증 완료·유효기간·미사용 여부를 검증한다.
+        // 성공하면 확인값을 사용 처리하고 실제 인증 완료 시각을 반환한다.
+        LocalDateTime emailVerifiedDt =
+                signupEmailService.consumeForSignup(
+                        email,
+                        request.emailVerificationToken()
+                );
 
-        // 정상 등록은 1행이다. 다른 결과이면 예외를 발생시켜 롤백한다.
-        if (insertRow != 1) {
-            throw new IllegalStateException("회원가입 중 오류가 발생했습니다.");
+        // true로 전달한 경우에만 동의로 저장한다.
+        // false, null 또는 필드 미전달은 모두 미동의다.
+        boolean emailNotificationEnabled =
+                Boolean.TRUE.equals(request.emailNotificationEnabled());
+
+        int insertedRows;
+
+        try {
+            insertedRows = authMepper.insert(
+                    email,
+                    passwordHash,
+                    name,
+                    nickname,
+                    request.age(),
+                    request.gender(),
+                    emailVerifiedDt,
+                    emailNotificationEnabled
+            );
+        } catch (DuplicateKeyException exception) {
+            // 사전 확인 이후 발생한 중복도 DB 제약 조건으로 차단한다.
+            // 예외가 전파되면 인증 확인값 사용 처리까지 롤백된다.
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "이미 사용 중인 회원 정보입니다."
+            );
+        }
+
+        if (insertedRows != 1) {
+            throw new IllegalStateException(
+                    "회원가입 중 오류가 발생했습니다."
+            );
         }
     }
 
@@ -110,12 +139,14 @@ public class AuthService {
 
         String nickname = request.nickname().trim();
 
+        // 일반 회원 정보와 수신 동의 상태를 함께 저장한다.
         int updatedRows = authMepper.updateProfile(
                 userId,
                 name,
                 nickname,
                 request.age(),
-                request.gender()
+                request.gender(),
+                request.emailNotificationEnabled()
         );
 
         if (updatedRows != 1) {

@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import java.time.LocalDateTime;
 
 @Mapper
 public interface AuthMapper {
@@ -42,46 +43,6 @@ public interface AuthMapper {
     AuthUser findByEmail(@Param("email") String email);
 
     /**
-     * 회원가입 정보를 저장한다.
-     * 나이와 성별은 미입력 시 NULL로 저장한다.
-     * 권한과 계정 상태는 서버에서 USER와 ACTIVE로 지정한다.
-     */
-    @Insert("""
-    INSERT INTO dbo.[USER] (
-        EMAIL,
-        PASSWORD_HASH,
-        NAME,
-        NICKNAME,
-        AGE,
-        GENDER,
-        ROLE,
-        STATUS,
-        CREATED_DT,
-        UPDATED_DT
-    )
-    VALUES (
-        #{email},
-        #{passwordHash},
-        #{name,jdbcType=NVARCHAR},
-        #{nickname},
-        #{age,jdbcType=INTEGER},
-        #{gender,jdbcType=VARCHAR},
-        'USER',
-        'ACTIVE',
-        SYSUTCDATETIME(),
-        SYSUTCDATETIME()
-    )
-    """)
-    int insert(
-            @Param("email") String email,
-            @Param("passwordHash") String passwordHash,
-            @Param("name") String name,
-            @Param("nickname") String nickname,
-            @Param("age") Integer age,
-            @Param("gender") String gender
-    );
-
-    /**
      * 로그인에 성공한 사용자의 마지막 로그인 시간을 UTC 기준으로 갱신한다.
      */
     @Update("""
@@ -107,7 +68,8 @@ public interface AuthMapper {
                 ELSE 0
             END
             AS BIT
-        ) AS emailVerified
+        ) AS emailVerified,
+        EMAIL_NOTIFICATION_ENABLED AS emailNotificationEnabled
     FROM dbo.[USER]
     WHERE ID = #{userId}
     """)
@@ -131,8 +93,8 @@ public interface AuthMapper {
     AuthUser findById(@Param("userId") Long userId);
 
     /**
-     * 활성 계정의 일반 회원 정보만 수정한다.
-     * 이메일, 비밀번호, 권한, 계정 상태는 변경하지 않는다.
+     * 활성 계정의 일반 회원 정보와 이메일 알림 수신 동의를 수정한다.
+     * 이메일 주소·인증 상태·비밀번호·권한·계정 상태는 변경하지 않는다.
      */
     @Update("""
     UPDATE dbo.[USER]
@@ -140,6 +102,7 @@ public interface AuthMapper {
         NICKNAME = #{nickname,jdbcType=NVARCHAR},
         AGE = #{age,jdbcType=INTEGER},
         GENDER = #{gender,jdbcType=VARCHAR},
+        EMAIL_NOTIFICATION_ENABLED = #{emailNotificationEnabled,jdbcType=BIT},
         UPDATED_DT = SYSUTCDATETIME()
     WHERE ID = #{userId}
       AND STATUS = 'ACTIVE'
@@ -149,7 +112,8 @@ public interface AuthMapper {
             @Param("name") String name,
             @Param("nickname") String nickname,
             @Param("age") Integer age,
-            @Param("gender") String gender
+            @Param("gender") String gender,
+            @Param("emailNotificationEnabled") boolean emailNotificationEnabled
     );
 
     /**
@@ -169,5 +133,51 @@ public interface AuthMapper {
             @Param("userId") Long userId,
             @Param("oldPasswordHash") String oldPasswordHash,
             @Param("newPasswordHash") String newPasswordHash
+    );
+
+    /**
+     * 이메일 인증을 완료한 회원의 가입 정보를 저장한다.
+     * 인증 완료 시각은 서버에서 검증한 이력의 값을 사용한다.
+     * 권한과 계정 상태는 서버에서 USER·ACTIVE로 지정한다.
+     */
+    @Insert("""
+    INSERT INTO dbo.[USER] (
+        EMAIL,
+        PASSWORD_HASH,
+        NAME,
+        NICKNAME,
+        AGE,
+        GENDER,
+        ROLE,
+        STATUS,
+        EMAIL_VERIFIED_DT,
+        EMAIL_NOTIFICATION_ENABLED,
+        CREATED_DT,
+        UPDATED_DT
+    )
+    VALUES (
+        #{email},
+        #{passwordHash},
+        #{name,jdbcType=NVARCHAR},
+        #{nickname},
+        #{age,jdbcType=INTEGER},
+        #{gender,jdbcType=VARCHAR},
+        'USER',
+        'ACTIVE',
+        #{emailVerifiedDt,jdbcType=TIMESTAMP},
+        #{emailNotificationEnabled,jdbcType=BIT},
+        SYSUTCDATETIME(),
+        SYSUTCDATETIME()
+    )
+    """)
+    int insert(
+            @Param("email") String email,
+            @Param("passwordHash") String passwordHash,
+            @Param("name") String name,
+            @Param("nickname") String nickname,
+            @Param("age") Integer age,
+            @Param("gender") String gender,
+            @Param("emailVerifiedDt") LocalDateTime emailVerifiedDt,
+            @Param("emailNotificationEnabled") boolean emailNotificationEnabled
     );
 }
