@@ -92,8 +92,7 @@ public interface AuthMapper {
     int updateLastLoginDt(@Param("userId") Long userId);
 
     /**
-     * 로그인한 사용자의 ID로 회원 정보를 조회한다.
-     * 비밀번호 해시는 조회하지 않는다.
+     * 본인의 회원 정보와 현재 이메일 인증 상태를 조회한다.
      */
     @Select("""
     SELECT
@@ -101,7 +100,14 @@ public interface AuthMapper {
         NAME AS name,
         NICKNAME AS nickname,
         AGE AS age,
-        GENDER AS gender
+        GENDER AS gender,
+        CAST(
+            CASE
+                WHEN EMAIL_VERIFIED_DT IS NOT NULL THEN 1
+                ELSE 0
+            END
+            AS BIT
+        ) AS emailVerified
     FROM dbo.[USER]
     WHERE ID = #{userId}
     """)
