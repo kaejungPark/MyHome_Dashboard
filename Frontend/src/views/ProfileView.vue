@@ -14,8 +14,8 @@ interface ProfileResponse {
   nickname: string
   age: number | null
   gender: Gender | null
-  emailVerified: boolean
-  emailNotificationEnabled: boolean
+  emailVerified: boolean // 서버에서 조회한 인증 여부. 이 화면에서 변경하지 않는다.
+  emailNotificationEnabled: boolean // 조회한 수신 동의 값. 체크 변경 후 저장해야 반영된다.
 }
 
 const router = useRouter()
@@ -55,7 +55,10 @@ const { errorMessage: passwordError, showError: showPasswordError } =
 
 const busy = computed(() => loading.value || saving.value || changingPassword.value)
 
-// DB에 저장된 회원 정보와 수신 동의 상태를 폼에 반영한다.
+/**
+ * DB에 저장된 회원 정보와 수신 동의를 입력 폼에 반영한다.
+ * 인증 여부는 안내에만 사용하고 수신 동의와 별도로 관리한다.
+ */
 function applyProfile(profile: ProfileResponse) {
   form.email = profile.email
   form.name = profile.name ?? ''
@@ -128,6 +131,8 @@ async function saveProfile() {
   saving.value = true
 
   try {
+    // 수신 동의는 체크 순간이 아니라 저장 요청 시 DB에 반영한다.
+    // 이메일 주소와 인증 상태는 서버 관리 값이므로 요청 본문에 포함하지 않는다.
     await request<void>('/api/auth/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },

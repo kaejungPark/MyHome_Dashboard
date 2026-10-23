@@ -126,8 +126,11 @@ public class AuthService {
     }
 
     /**
-     * 본인의 일반 회원 정보를 수정하고 저장된 닉네임을 반환한다.
-     * 반환된 닉네임은 컨트롤러에서 세션 갱신에 사용한다.
+     * 활성 회원의 일반 정보와 이메일 알림 수신 동의를 수정한다.
+     * 수신 동의 변경은 이메일 인증 상태를 변경하지 않는다.
+     * 실제 알림 대상 여부는 알림 조회에서 인증 상태와 동의를 함께 검사한다.
+     *
+     * 반환된 닉네임은 컨트롤러에서 현재 로그인 세션을 갱신하는 데 사용한다.
      */
     @Transactional
     public String updateProfile(Long userId, ProfileUpdateRequest request) {

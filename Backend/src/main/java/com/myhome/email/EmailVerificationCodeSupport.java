@@ -15,9 +15,9 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * 환경변수의 Base64 비밀키를 읽어 HMAC 키를 구성한다.
- * 형식이 잘못됐거나 키가 32바이트 미만이면 애플리케이션 시작을 중단한다.
- * 기존 인증번호를 검증할 수 있도록 재시작 후에도 같은 키를 사용한다.
+ *  기존 회원 인증은 userId 기반 createHash()/matches()를 사용하고,
+ *  가입 전 인증은 이메일 기반 createSignupHash()/matchesSignupCode()를 사용한다.
+ *  두 흐름은 해시 입력 형식을 구분하며 같은 서버 비밀키를 사용한다.
  */
 @Component
 public class EmailVerificationCodeSupport {
@@ -222,8 +222,11 @@ public class EmailVerificationCodeSupport {
     }
 
     /**
-     * 충분히 긴 난수로 만든 가입 확인값을 SHA-256으로 해시 처리한다.
-     * 원본 확인값은 클라이언트에 반환하고 DB에는 해시만 저장한다.
+     * 충분히 긴 난수로 생성한 가입 확인값을 SHA-256으로 해시 처리한다.
+     * 원본 확인값은 클라이언트에 전달하고 DB에는 해시만 저장한다.
+     *
+     * 6자리 인증번호는 가능한 조합이 적어 서버 비밀키를 사용하는 HMAC으로 처리하지만,
+     * 가입 확인값은 32바이트 난수이므로 별도의 SHA-256 해시로 저장한다.
      */
     public String hashVerificationToken(String verificationToken) {
         if (verificationToken == null

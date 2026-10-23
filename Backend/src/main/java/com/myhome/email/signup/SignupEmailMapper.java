@@ -8,9 +8,15 @@ import java.time.LocalDateTime;
 public interface SignupEmailMapper {
 
     /**
-     * 같은 이메일의 인증 요청을 순서대로 처리한다.
-     * 테이블 조회로 SQL Server의 암시적 트랜잭션을 시작한 뒤 잠금을 요청한다.
-     * 반드시 서비스 트랜잭션 안에서 호출해야 한다.
+     * 같은 이메일의 인증번호 발급·확인·가입 확인값 사용을 순서대로 처리한다.
+     * 아직 인증 이력이 없는 이메일도 이름 기반 잠금으로 보호한다.
+     *
+     * 테이블 조회 후 DB 트랜잭션 시작 여부를 확인하고 잠금을 요청한다.
+     * 잠금은 트랜잭션 커밋 또는 롤백 시 해제된다.
+     * 반드시 서비스의 쓰기 트랜잭션 안에서 호출해야 한다.
+     *
+     * @param resource 서비스에서 이메일 해시로 구성한 잠금 이름
+     * @return 0 이상이면 성공, 음수이면 시간 초과·취소·호출 오류 등의 실패
      */
     @Select("""
     SET NOCOUNT ON;
@@ -39,6 +45,7 @@ public interface SignupEmailMapper {
 
     SELECT @result AS lockResult;
     """)
+    // 잠금은 매번 DB에서 실행해야 하므로 캐시된 조회 결과를 재사용하지 않는다.
     @Options(
             useCache = false,
             flushCache = Options.FlushCachePolicy.TRUE
@@ -158,8 +165,9 @@ public interface SignupEmailMapper {
     );
 
     /**
-     * 인증번호 확인 성공 시 인증 완료 일시와 가입 확인값 해시를 저장한다.
-     * 아직 회원가입 전이므로 USED_DT는 변경하지 않는다.
+     * 인증번호 검증 성공 시 인증 완료 일시와 가입 확인값 해시를 저장한다.
+     * 인증 완료는 회원가입 완료가 아니므로 USED_DT는 아직 변경하지 않는다.
+     * 실제 회원가입 시 consume()에서 확인값을 사용 완료 처리한다.
      */
     @Update("""
         UPDATE dbo.SIGNUP_EMAIL_VERIFICATION

@@ -62,8 +62,9 @@ public class ShoppingNotificationService {
         LocalDate today = LocalDate.now(KOREA_ZONE);
         LocalDate tomorrow = today.plusDays(1);
 
-        // 활성 회원의 항목 중 미구매이며 구매 예정일이 오늘 또는 내일인 대상을 조회한다.
-        // 수신 이메일과 메일 본문에 필요한 물품 정보를 함께 가져온다.
+        // 활성 회원 중 이메일 인증을 완료하고 수신에 동의한 회원만 조회한다.
+        // 구매 예정일이 오늘 또는 내일인 미구매 항목과 수신 이메일을 함께 가져온다.
+        // 대상은 조회 시점 기준이므로 이후 동의 철회나 구매 완료는 이번 목록에 반영되지 않는다.
         List<ShoppingNotificationTarget> targets = notificationMapper.findTargets(today, tomorrow);
 
         // 발송 대상이 없으면 이력 생성과 메일 발송 없이 이번 실행을 종료한다.
@@ -130,6 +131,8 @@ public class ShoppingNotificationService {
         String subject = "[MyHome] 장보기 예정 알림";
         String content = buildMailContent(today, items);
 
+        // 중복 발송 판단 기준은 개별 장보기 항목이 아니라 사용자와 알림 날짜다.
+        // 같은 날 항목을 추가해도 기존 발송 이력이 있으면 새 메일을 보내지 않는다.
         ShoppingNotificationHistory history = historyService.claimForSending(userId, today, recipient);
 
         // 현재 구현에서는 성공·처리 중·실패 이력이 모두 발송 건너뛰기 대상이다.

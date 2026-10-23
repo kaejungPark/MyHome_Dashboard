@@ -22,8 +22,14 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 회원가입 전 이메일 인증번호 발송·확인을 처리한다.
- * 인증 성공 후에는 회원가입에 사용할 일회용 확인값을 발급한다.
+ * 회원가입 전 이메일 소유 확인과 일회용 가입 확인값 발급을 담당한다.
+ *
+ * 이메일로 받은 인증번호를 확인하면 가입 확인값을 발급하고,
+ * 실제 회원가입 시에는 이 확인값의 이메일·유효기간·사용 여부를 다시 검사한다.
+ *
+ * 번호 발급·확인은 별도 트랜잭션으로 처리하고,
+ * 가입 확인값 사용 처리는 회원가입 트랜잭션에 참여한다.
+ * 실제 메일 전송은 DB 트랜잭션 밖에서 수행한다.
  */
 @Service
 public class SignupEmailService {
@@ -31,16 +37,28 @@ public class SignupEmailService {
     private static final Logger log =
             LoggerFactory.getLogger(SignupEmailService.class);
 
+    // 이메일로 받은 인증번호를 입력할 수 있는 시간
     private static final int CODE_VALID_MINUTES = 5;
+
+    // 인증 성공 후 일회용 확인값으로 회원가입을 완료할 수 있는 시간
     private static final int PROOF_VALID_MINUTES = 15;
+
+    // 같은 이메일에 인증번호를 다시 발급할 수 있는 최소 간격
     private static final int RESEND_INTERVAL_SECONDS = 60;
+
+    // 같은 이메일의 최근 1시간 발급 제한. 실패·무효화된 요청도 포함한다.
     private static final int MAX_ISSUES_PER_HOUR = 5;
+
+    // 한 번 발급한 인증번호에 허용하는 오입력 횟수
     private static final int MAX_FAILED_ATTEMPTS = 5;
 
     private final SignupEmailMapper signupEmailMapper;
     private final AuthMapper authMapper;
     private final EmailVerificationCodeSupport codeSupport;
     private final MailService mailService;
+
+    // 인증번호 발급·확인·발송 실패 정리에 사용하는 트랜잭션 도구다.
+    // consumeForSignup()은 이 도구를 사용하지 않고 회원가입 트랜잭션에 참여한다.
     private final TransactionTemplate transactions;
 
     public SignupEmailService(
@@ -152,10 +170,16 @@ public class SignupEmailService {
     }
 
     /**
-     * 회원가입 서비스의 트랜잭션에 참여해 확인값을 사용 완료 처리한다.
-     * 회원 저장이 실패하면 이 처리도 함께 롤백된다.
+     * 이메일과 일회용 가입 확인값을 검증하고 사용 완료 처리한다.
      *
-     * 반드시 다른 빈의 @Transactional 회원가입 메서드에서 호출한다.
+     * MANDATORY는 새 트랜잭션을 만들지 않고 호출자의 트랜잭션 참여를 강제한다.
+     * 회원 INSERT가 실패하면 확인값 사용 처리도 함께 롤백되어 재시도할 수 있다.
+     *
+     * 다른 빈의 @Transactional 회원가입 메서드에서 호출해야 한다.
+     *
+     * @param email 회원가입에 사용할 이메일
+     * @param verificationToken 인증번호 확인 성공 시 발급받은 원본 확인값
+     * @return USER.EMAIL_VERIFIED_DT에 저장할 실제 인증 완료 시각
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public LocalDateTime consumeForSignup(
@@ -318,6 +342,9 @@ public class SignupEmailService {
             );
         }
 
+        // 이미 인증한 요청에서는 가입 확인값을 다시 발급하지 않는다.
+        // DB에는 확인값의 해시만 있으므로 이전 원본을 복원할 수 없다.
+        // 클라이언트가 확인값을 잃었다면 인증번호를 새로 발급받아야 한다.
         if (token.verifiedDt() != null) {
             return ConfirmOutcome.failure(
                     HttpStatus.CONFLICT,
@@ -346,6 +373,9 @@ public class SignupEmailService {
                 token.codeHash()
         );
 
+        // 번호 불일치는 실패 횟수 증가 후 결과 객체로 반환한다.
+        // 여기서 예외를 던지면 트랜잭션이 롤백되어 실패 횟수도 취소될 수 있다.
+        // HTTP 오류는 confirmVerification()에서 커밋이 끝난 뒤 발생시킨다.
         if (!matches) {
             requireOne(
                     signupEmailMapper.increaseFailures(token.id())
@@ -454,10 +484,18 @@ public class SignupEmailService {
         );
     }
 
+    /**
+     * 인증 이력의 저장·만료 비교에 사용할 UTC 현재 시각을 반환한다.
+     * DB의 DATETIME2에는 시간대 정보가 없으므로 UTC 기준을 일관되게 적용한다.
+     */
     private static LocalDateTime nowUtc() {
         return LocalDateTime.now(ZoneOffset.UTC);
     }
 
+    /**
+     * 단일 인증 이력의 변경 결과가 정확히 1행인지 확인한다.
+     * 예상과 다르면 예외를 발생시켜 현재 트랜잭션을 롤백한다.
+     */
     private static void requireOne(int affectedRows) {
         if (affectedRows != 1) {
             throw new IllegalStateException(

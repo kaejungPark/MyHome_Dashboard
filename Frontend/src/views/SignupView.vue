@@ -33,7 +33,7 @@ const form = reactive({
 
 const message = ref('')
 const saving = ref(false)
-const completed = ref(false)
+const completed = ref(false) // 가입 성공 후 자동 로그인에 실패하더라도 다시 가입 요청을 보내지 않도록 한다.
 
 // 이메일 인증 처리 상태
 const emailInput = ref<HTMLInputElement | null>(null)
@@ -42,14 +42,16 @@ const confirmingCode = ref(false)
 const verificationMessage = ref('')
 const verificationError = ref('')
 
-// 인증번호 발급 정보
+// 인증번호 발급 단계의 정보다.
+// requestId는 발급 요청 식별자이며 이것만으로 회원가입할 수는 없다.
 const requestId = ref('')
 const requestedEmail = ref('')
 const verificationCode = ref('')
 const codeExpiresAt = ref(0)
 const resendAvailableAt = ref(0)
 
-// 인증 완료 정보: 서버가 반환한 확인값을 회원가입 시 함께 보낸다.
+// 인증번호 확인에 성공한 뒤 받는 일회용 가입 확인값이다.
+// 브라우저 저장소에 저장하지 않으므로 새로고침하면 다시 인증해야 한다.
 const verificationToken = ref('')
 const verifiedEmail = ref('')
 const proofExpiresAt = ref(0)
@@ -64,6 +66,7 @@ onMounted(() => {
   }, 1000)
 })
 
+// 다른 화면으로 이동하면 타이머를 해제해 불필요한 갱신이 계속되지 않게 한다.
 onUnmounted(() => {
   if (clockTimer !== undefined) {
     clearInterval(clockTimer)
@@ -112,8 +115,9 @@ const sendButtonText = computed(() => {
 })
 
 /**
- * 이메일을 변경하면 이전 인증번호와 가입 확인값을 폐기한다.
- * 인증한 이메일과 다른 이메일로 가입하지 않도록 한다.
+ * 이메일을 변경하면 화면에 보관한 인증번호와 가입 확인값을 초기화한다.
+ * 이 동작만으로 서버의 인증 이력을 무효화하지는 않는다.
+ * 서버는 가입 요청 시 인증한 이메일과 가입 이메일이 일치하는지 다시 검사한다.
  */
 watch(
   () => form.email,
@@ -126,6 +130,7 @@ watch(
     // 재발송 대기 시간은 유지한다.
     // 입력값 변경만으로 화면의 발송 제한이 초기화되지 않도록 한다.
   },
+  // 이메일 값이 바뀌는 즉시 화면의 인증 상태를 초기화한다.
   { flush: 'sync' },
 )
 
@@ -143,6 +148,7 @@ function clearVerification() {
   proofExpiresAt.value = 0
 }
 
+// 남은 초를 분:초 형식으로 표시한다. 실제 만료 여부는 서버에서 최종 검사한다.
 function formatRemaining(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
@@ -269,6 +275,8 @@ async function confirmVerificationCode() {
       throw new Error('가입 인증 정보를 확인하지 못했습니다. 다시 발송해 주세요.')
     }
 
+    // 응답을 기다리는 동안 이메일이나 발급 요청이 바뀌었다면
+    // 이전 요청의 인증 성공 결과를 현재 화면에 적용하지 않는다.
     if (email !== normalizedEmail.value || currentRequestId !== requestId.value) {
       return
     }
