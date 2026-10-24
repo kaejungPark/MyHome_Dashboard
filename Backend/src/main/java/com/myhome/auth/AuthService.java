@@ -163,7 +163,13 @@ public class AuthService {
     }
 
     /**
-     * 현재 비밀번호를 검증하고 새 비밀번호를 해시로 저장한다.
+     * 일반 로그인 상태에서 현재 비밀번호를 검증하고
+     * 새 비밀번호를 해시로 저장한다.
+     *
+     * 임시 로그인 상태의 변경은 PasswordResetService가 처리한다.
+     * 매퍼에서 비밀번호 변경과 함께 인증 버전을 증가시키므로
+     * 기존 로그인 세션은 이후 요청부터 유효하지 않게 된다.
+     *
      * 트랜잭션 완료 후 컨트롤러에서 현재 로그인 세션을 종료한다.
      */
     @Transactional
@@ -200,6 +206,8 @@ public class AuthService {
 
         String newPasswordHash = passwordEncoder.encode(newPassword);
 
+        // 검증했던 기존 해시가 여전히 일치할 때만 새 비밀번호를 저장한다.
+        // 인증 버전도 함께 증가하여 다른 기존 로그인 세션을 무효화한다.
         int updatedRows = authMepper.updatePassword(
                 userId,
                 user.passwordHash(),

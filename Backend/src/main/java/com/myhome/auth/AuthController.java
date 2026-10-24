@@ -16,6 +16,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler;
+import com.myhome.auth.password.PasswordResetService;
 
 /**
  * 회원가입, CSRF 토큰 조회, 로그인 사용자 조회 API를 제공한다.
@@ -26,13 +27,22 @@ import org.springframework.security.web.authentication.logout.CookieClearingLogo
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    // 일반 회원가입·정보 수정·일반 비밀번호 변경을 담당한다.
     private final AuthService authService;
+
+    // 임시 비밀번호 로그인 후 새 비밀번호 변경을 담당한다.
+    private final PasswordResetService passwordResetService;
+
     // 변경된 인증 정보를 현재 HTTP 세션에 명시적으로 저장한다.
     private final HttpSessionSecurityContextRepository securityContextRepository =
             new HttpSessionSecurityContextRepository();
 
-    public AuthController (AuthService authService) {
+    public AuthController(
+            AuthService authService,
+            PasswordResetService passwordResetService
+    ) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
     }
 
     /**
@@ -67,11 +77,15 @@ public class AuthController {
     }
 
     /**
-     * 현재 로그인한 사용자의 ID, 이메일, 닉네임, 권한을 반환한다.
+     * 현재 로그인한 사용자의 요약 정보와 비밀번호 변경 필요 여부를 반환한다.
      *
-     * @AuthenticationPrincipal로 서버 세션에 보관된 LoginUser를 가져온다.
-     * 매 요청마다 DB를 조회하지 않고 로그인 시 구성된 정보를 반환한다.
-     * 권한은 USER 또는 ADMIN으로 전달한다.
+     * @AuthenticationPrincipal로 세션의 LoginUser를 가져온다.
+     * 컨트롤러는 세션 정보를 반환하며, 호출 전 Security 필터에서
+     * DB의 현재 계정 상태와 인증 버전을 확인한다.
+     *
+     * 일반 로그인 권한은 USER·ADMIN이며,
+     * 임시 로그인은 PASSWORD_RESET과 변경 필요 여부 true를 반환한다.
+     *
      * 비로그인 요청은 Spring Security에서 401로 차단한다.
      */
     @GetMapping("/me")
@@ -81,9 +95,10 @@ public class AuthController {
         return ApiResponse.success(
                 new LoginResponse(
                         loginUser.getId(),
-                        loginUser.getUsername(), // 로그인 식별자로 사용하는 이메일
+                        loginUser.getUsername(),
                         loginUser.getNickname(),
-                        loginUser.getRole()
+                        loginUser.getRole(),
+                        loginUser.isPasswordChangeRequired()
                 )
         );
     }
@@ -140,7 +155,17 @@ public class AuthController {
 
     /**
      * PUT /api/auth/password: 현재 비밀번호를 확인하고 새 비밀번호로 변경한다.
-     * 저장 완료 후 현재 세션과 인증 정보를 제거한다.
+     *
+     * 일반 로그인:
+     * - 현재 일반 비밀번호를 검증한 후 변경한다.
+     *
+     * 임시 로그인:
+     * - 이메일로 받은 임시 비밀번호를 검증한 후 변경한다.
+     * - 사용한 임시 비밀번호 이력도 사용 완료 처리한다.
+     *
+     * 새 비밀번호 저장 시 인증 버전이 증가한다.
+     * 저장 완료 후 현재 세션과 인증 정보를 제거하고,
+     * 다른 기존 세션도 다음 요청부터 필터에서 거절된다.
      */
     @PutMapping("/password")
     public ApiResponse<Void> changePassword(
@@ -150,18 +175,36 @@ public class AuthController {
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse
     ) {
-        // 저장 실패 시 예외가 발생하므로 아래 로그아웃 처리는 실행되지 않는다.
-        authService.changePassword(loginUser.getId(), request);
+        /*
+         * 로그인 종류는 클라이언트 요청값이 아니라
+         * 서버에서 인증하여 세션에 저장한 값으로 판단한다.
+         */
+        if (loginUser.isPasswordChangeRequired()) {
+            passwordResetService.changePassword(loginUser, request);
+        } else {
+            authService.changePassword(loginUser.getId(), request);
+        }
+
+        // 서비스가 정상 반환했으므로 비밀번호 변경 트랜잭션이 완료된 상태다.
+        // 저장 실패 시에는 예외가 발생하여 아래 로그아웃 처리를 실행하지 않는다.
 
         // 현재 세션을 무효화하고 SecurityContext의 인증 정보를 제거한다.
         SecurityContextLogoutHandler logoutHandler =
                 new SecurityContextLogoutHandler();
 
-        logoutHandler.logout(httpRequest, httpResponse, authentication);
+        logoutHandler.logout(
+                httpRequest,
+                httpResponse,
+                authentication
+        );
 
-        // 브라우저에 남은 현재 세션 쿠키도 제거한다.
+        // 브라우저에 남은 현재 세션 쿠키도 삭제하도록 응답한다.
         new CookieClearingLogoutHandler("JSESSIONID")
-                .logout(httpRequest, httpResponse, authentication);
+                .logout(
+                        httpRequest,
+                        httpResponse,
+                        authentication
+                );
 
         return ApiResponse.success(null);
     }

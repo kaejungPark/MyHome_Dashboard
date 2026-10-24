@@ -27,7 +27,11 @@ public interface AuthMapper {
 
     /**
      * 이메일로 로그인 검증에 필요한 사용자 정보를 조회한다.
-     * 일치하는 사용자가 없으면 null을 반환한다.
+     *
+     * 일반 비밀번호 해시, 권한, 계정 상태와 인증 버전을 함께 조회한다.
+     * 일치하는 회원이 없으면 null을 반환한다.
+     *
+     * 반환값은 인증 처리에만 사용하며 API 응답으로 직접 반환하지 않는다.
      */
     @Select("""
     SELECT
@@ -36,7 +40,8 @@ public interface AuthMapper {
         PASSWORD_HASH AS passwordHash,
         NICKNAME AS nickname,
         ROLE AS role,
-        STATUS AS status
+        STATUS AS status,
+        AUTH_VERSION AS authVersion
     FROM dbo.[USER]
     WHERE EMAIL = #{email}
     """)
@@ -76,8 +81,13 @@ public interface AuthMapper {
     ProfileResponse findProfile(@Param("userId") Long userId);
 
     /**
-     * 회원 정보 수정과 비밀번호 검증에 필요한 사용자 정보를 조회한다.
-     * 비밀번호 해시는 서버 내부에서만 사용한다.
+     * 회원 정보 수정·비밀번호 검증·로그인 세션 유효성 검사에 필요한
+     * 현재 회원 정보를 조회한다.
+     *
+     * 로그인 세션에 저장된 정보와 달리 DB의 최신 계정 상태와
+     * 인증 버전을 확인할 수 있다.
+     *
+     * 비밀번호 해시를 포함하므로 반환값을 응답이나 로그에 노출하지 않는다.
      */
     @Select("""
     SELECT
@@ -86,7 +96,8 @@ public interface AuthMapper {
         PASSWORD_HASH AS passwordHash,
         NICKNAME AS nickname,
         ROLE AS role,
-        STATUS AS status
+        STATUS AS status,
+        AUTH_VERSION AS authVersion
     FROM dbo.[USER]
     WHERE ID = #{userId}
     """)
@@ -117,12 +128,21 @@ public interface AuthMapper {
     );
 
     /**
-     * 검증에 사용한 비밀번호 해시가 그대로인 경우에만 변경한다.
-     * 동시에 들어온 다른 변경 요청이 먼저 처리됐다면 0을 반환한다.
+     * 검증에 사용한 기존 비밀번호 해시가 그대로인 경우에만
+     * 새 비밀번호 해시를 저장한다.
+     *
+     * 다른 요청이 비밀번호를 먼저 변경했거나 계정이 비활성 상태가 되면
+     * 갱신 건수 0을 반환한다.
+     *
+     * 비밀번호 변경과 함께 인증 버전을 증가시킨다.
+     * 기존 세션은 이전 버전을 가지고 있으므로 다음 요청부터 거절된다.
+     *
+     * @return 정상 변경 시 1, 변경 조건을 만족하지 않으면 0
      */
     @Update("""
     UPDATE dbo.[USER]
     SET PASSWORD_HASH = #{newPasswordHash},
+        AUTH_VERSION = AUTH_VERSION + 1,
         UPDATED_DT = SYSUTCDATETIME()
     WHERE ID = #{userId}
       AND STATUS = 'ACTIVE'
