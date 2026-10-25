@@ -3,22 +3,43 @@ import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { House, LogIn, Eye, EyeOff } from '@lucide/vue'
 import { request } from '../api/client'
+import type { ApiResponse } from '../types/api'
+
+/**
+ * 로그인 성공 응답의 data에 들어오는 정보다.
+ *
+ * false: 일반 로그인으로 대시보드 이동
+ * true: 임시 로그인으로 비밀번호 변경 화면 이동
+ *
+ * 값은 프론트에서 판단하지 않고 서버의 인증 결과를 사용한다.
+ */
+interface LoginResult {
+  passwordChangeRequired: boolean
+}
 
 // 사용자가 입력하는 로그인 정보다.
+// 비밀번호에는 일반 비밀번호와 이메일로 받은 임시 비밀번호 모두 입력할 수 있다.
 const email = ref('')
 const password = ref('')
 
-// 비밀번호 표시 여부와 안내 메시지를 관리한다.
+// 비밀번호 표시 여부와 로그인 오류 안내를 관리한다.
 const showPassword = ref(false)
 const message = ref('')
 
-// 중복 로그인 요청을 방지한다.
+// 로그인 버튼을 연속으로 눌러 중복 요청하는 것을 방지한다.
 const submitting = ref(false)
 
 /**
- * CSRF 토큰을 조회한 뒤 이메일·비밀번호를 폼 형식으로 전송한다.
- * 로그인 실패는 화면에 안내하고, 성공하면 대시보드를 새로 연다.
- * 직접 fetch를 사용하므로 CSRF 토큰도 이 함수에서 전달한다.
+ * 이메일·비밀번호를 폼 형식으로 전송하여 로그인한다.
+ *
+ * 처리 순서:
+ * 1. 현재 세션의 CSRF 토큰 조회
+ * 2. 기존 로그인 API로 폼 데이터 전송
+ * 3. HTTP 상태와 응답 데이터 확인
+ * 4. 서버가 반환한 변경 필요 여부에 따라 화면 이동
+ *
+ * 로그인은 직접 fetch를 사용하므로 CSRF 헤더를 직접 추가하고,
+ * ApiResponse의 success·data도 이 함수에서 확인한다.
  */
 async function submitLogin() {
   if (submitting.value) return
@@ -27,6 +48,7 @@ async function submitLogin() {
   submitting.value = true
 
   try {
+    // 로그인 POST 요청에 사용할 현재 세션의 CSRF 토큰을 조회한다.
     const csrf = await request<{
       headerName: string
       token: string
@@ -36,7 +58,13 @@ async function submitLogin() {
       throw new Error('요청을 준비하지 못했습니다. 다시 시도해 주세요.')
     }
 
-    // 로그인 실패의 401은 일반적인 비로그인 접근과 구분해 안내한다.
+    /*
+     * Spring Security의 formLogin은 JSON이 아닌 폼 데이터를 읽는다.
+     * 기존 usernameParameter("email"), passwordParameter("password")와
+     * 동일한 이름으로 전송해야 한다.
+     *
+     * 비밀번호는 공백도 값의 일부이므로 trim하지 않는다.
+     */
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
@@ -48,28 +76,79 @@ async function submitLogin() {
       }),
     })
 
+    // 일반·임시 비밀번호 검증 실패는 동일한 안내로 처리한다.
+    // 계정 존재 여부나 임시 비밀번호 상태를 별도로 노출하지 않는다.
     if (response.status === 401) {
       throw new Error('이메일 또는 비밀번호를 확인해 주세요.')
     }
 
+    // 로그인 요청의 CSRF 토큰이 유효하지 않은 경우 등을 안내한다.
     if (response.status === 403) {
-      throw new Error('요청이 만료됐습니다. 다시 로그인해 주세요.')
+      throw new Error('요청이 거절됐습니다. 화면을 새로고침한 후 다시 로그인해 주세요.')
     }
 
+    // 서버 오류는 비밀번호 불일치와 구분한다.
     if (!response.ok) {
       throw new Error('로그인하지 못했습니다. 잠시 후 다시 시도해 주세요.')
     }
 
-    // 앱을 다시 열어 회원 카드와 대시보드에 로그인 상태를 반영한다.
-    window.location.replace('/')
-  } catch (error) {
+    /*
+     * 직접 fetch를 사용했으므로 응답 전체를 읽는다.
+     *
+     * 응답 예:
+     * {
+     *   success: true,
+     *   data: { passwordChangeRequired: true },
+     *   message: null
+     * }
+     */
+    let result: ApiResponse<LoginResult> | null = null
+
+    try {
+      result = (await response.json()) as ApiResponse<LoginResult>
+    } catch {
+      throw new Error('로그인 응답을 확인하지 못했습니다. 다시 시도해 주세요.')
+    }
+
+    // HTTP 요청이 성공했어도 API 처리 결과가 실패이면 이동하지 않는다.
+    if (!result?.success) {
+      throw new Error(result?.message || '로그인 결과를 확인하지 못했습니다.')
+    }
+
+    /*
+     * TypeScript 타입 선언만으로 실제 서버 응답이 검증되지는 않는다.
+     * 변경 필요 여부가 없거나 boolean이 아니면 이동을 중단한다.
+     *
+     * 누락된 값을 false로 처리하면 임시 로그인 사용자를
+     * 대시보드로 잘못 이동시킬 수 있다.
+     */
+    if (!result.data || typeof result.data.passwordChangeRequired !== 'boolean') {
+      throw new Error('로그인 상태 정보를 확인하지 못했습니다. 다시 시도해 주세요.')
+    }
+
+    // 로그인에 성공한 비밀번호 원문은 화면 상태에서 비운다.
+    // URL·localStorage·sessionStorage 등에 저장하지 않는다.
+    password.value = ''
+
+    /*
+     * 앱을 다시 열어 App.vue도 새 세션의 로그인 정보를 조회하게 한다.
+     * replace를 사용하여 뒤로 가기로 로그인 제출 화면에 돌아가지 않게 한다.
+     *
+     * 화면 이동은 사용자 안내용이며,
+     * 실제 API 접근 제한은 백엔드 PasswordStateFilter가 담당한다.
+     */
+    const targetPath = result.data.passwordChangeRequired ? '/change-password' : '/'
+
+    window.location.replace(targetPath)
+  } catch (error: unknown) {
+    // 오류 발생 시 현재 로그인 화면에서 안내한다.
     message.value = error instanceof Error ? error.message : '서버에 연결하지 못했습니다.'
   } finally {
+    // 실패했을 때 다시 로그인할 수 있도록 요청 상태를 해제한다.
     submitting.value = false
   }
 }
 </script>
-
 <template>
   <div class="crud-page login-page">
     <section class="card login-card" aria-labelledby="login-heading">
@@ -107,6 +186,7 @@ async function submitLogin() {
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="current-password"
                 placeholder="비밀번호를 입력해 주세요"
+                :disabled="submitting"
                 required
               />
             </label>
@@ -135,10 +215,13 @@ async function submitLogin() {
         </button>
       </form>
 
+      <!-- 회원가입과 비밀번호 찾기 화면으로 이동하는 링크다. -->
       <div class="login-links">
         <RouterLink to="/signup">회원가입</RouterLink>
+
         <span aria-hidden="true">|</span>
-        <button type="button" disabled>비밀번호 찾기 · 준비 중</button>
+
+        <RouterLink to="/forgot-password">비밀번호 찾기</RouterLink>
       </div>
 
       <RouterLink to="/" class="back-link"> 대시보드로 돌아가기 </RouterLink>
@@ -245,12 +328,15 @@ async function submitLogin() {
   color: #cbd5e1;
 }
 
-.login-links button {
-  padding: 0;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 12px;
-  cursor: not-allowed;
+/* 회원가입·비밀번호 찾기 링크의 표시를 통일한다. */
+.login-links a {
+  color: #2563eb;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.login-links a:hover {
+  text-decoration: underline;
 }
 
 .back-link {

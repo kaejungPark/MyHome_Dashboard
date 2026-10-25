@@ -10,17 +10,28 @@ const route = useRoute()
 // 로그인 버튼을 누르면 로그인 화면으로 이동한다.
 const router = useRouter()
 
-// 로그인·회원가입 화면에서는 회원 사이드바를 숨긴다.
-const isAuthPage = computed(() => ['login', 'signup'].includes(String(route.name)))
-
+// 로그인·회원가입·비밀번호 찾기·임시 비밀번호 변경은 인증 화면이다.
+// 회원 사이드바를 숨기고 중앙 카드 형태의 배치를 사용한다.
+const isAuthPage = computed(() =>
+  ['login', 'signup', 'forgot-password', 'change-password'].includes(String(route.name)),
+)
 // MyHome 하위 메뉴의 열림 상태를 관리한다.
 const myHomeMenuOpen = ref(false)
 
+/**
+ * App.vue에서 회원 카드와 관리자 메뉴 표시에 사용하는 로그인 정보다.
+ * 임시 로그인 상태에서는 PASSWORD_RESET 권한을 받는다.
+ */
 interface LoginUser {
   id: number
   email: string
   nickname: string
-  role: 'USER' | 'ADMIN' // 사용자 권한
+
+  // 임시 로그인에는 USER·ADMIN 권한이 부여되지 않는다.
+  role: 'USER' | 'ADMIN' | 'PASSWORD_RESET'
+
+  // true이면 새 비밀번호 변경이 필요한 상태다.
+  passwordChangeRequired: boolean
 }
 
 // 서버에서 확인한 권한이 ADMIN인 경우에만 관리자 메뉴를 표시한다.
