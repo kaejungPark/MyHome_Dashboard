@@ -9,16 +9,25 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.dao.DuplicateKeyException;
 import com.myhome.common.validation.PageValidator;
 import com.myhome.common.util.PageUtils;
+import com.myhome.community.comment.CommentMapper;
 
 import java.util.List;
 
 @Service
 public class CommunityService {
 
+    // 게시글 조회·등록·수정·삭제와 신고 이력을 관리한다.
     private final CommunityMapper communityMapper;
 
-    public CommunityService(CommunityMapper communityMapper)  {
+    // 게시글 삭제 전 댓글·대댓글을 정리하고 동일한 게시글 잠금을 사용한다.
+    private final CommentMapper commentMapper;
+
+    public CommunityService(
+            CommunityMapper communityMapper,
+            CommentMapper commentMapper
+    ) {
         this.communityMapper = communityMapper;
+        this.commentMapper = commentMapper;
     }
 
     /**
@@ -175,45 +184,87 @@ public class CommunityService {
     }
 
     /**
-     * 로그인한 사용자가 작성한 게시글을 삭제한다.
+     * 로그인한 사용자가 작성한 게시글과 해당 댓글·대댓글을 실제 삭제한다.
+     *
      * 게시글이 없거나 숨김 상태이거나 본인 글이 아니면 404를 반환한다.
      * 신고 이력이 있으면 기록 보존을 위해 삭제를 차단하고 409를 반환한다.
+     *
+     * 처리 순서:
+     * 1. 공개 게시글 잠금
+     * 2. 작성자와 신고 이력 검사
+     * 3. 해당 게시글의 댓글·대댓글 삭제
+     * 4. 게시글 삭제
+     *
+     * 모든 삭제는 하나의 트랜잭션에서 실행한다.
+     * 게시글 삭제가 실패하면 앞서 삭제한 댓글도 함께 롤백된다.
      */
     @Transactional
     public void deleteCommunity(Long userId, Long id) {
-        if (id <= 0) {
+        if (userId == null || userId <= 0) {
             throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "삭제 중 오류가 발생하였습니다."
+                    HttpStatus.UNAUTHORIZED,
+                    "로그인이 필요합니다."
             );
         }
 
-        // 게시글 ID로 기존 정보를 조회한다.
-        CommunityDetailResponse community = communityMapper.findCommunity(id);
+        if (id == null || id <= 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "게시글 ID는 1 이상이어야 합니다."
+            );
+        }
 
-        // 게시글이 없거나 숨김 상태이거나 본인 글이 아니면 삭제를 차단한다.
-        if (community == null || community.isHidden()
-                || !community.userId().equals(userId)) {
+        /*
+         * 댓글 변경 서비스와 동일하게 게시글부터 잠근다.
+         * 댓글을 정리하는 도중 새 댓글이 등록되는 상황을 방지한다.
+         */
+        if (commentMapper.lockVisibleCommunity(id) == null) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND,
                     "게시글을 찾을 수 없습니다."
             );
         }
 
-        // 신고 처리 상태와 관계없이 신고 이력이 있는 게시글은 삭제를 차단한다.
-        if (communityMapper.existsReportHistory(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "신고 이력이 있는 게시글은 삭제할 수 없습니다.");
-        }
+        CommunityDetailResponse community =
+                communityMapper.findCommunity(id);
 
-        int deleteRow = communityMapper.delete(userId, id);
-
-        if (deleteRow == 0) {
+        // 기존 게시글 작성자·숨김 상태 검증을 유지한다.
+        if (community == null
+                || community.isHidden()
+                || !userId.equals(community.userId())) {
             throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, "커뮤니티 삭제 중 오류가 발생하였습니다."
+                    HttpStatus.NOT_FOUND,
+                    "게시글을 찾을 수 없습니다."
             );
         }
 
-        if (deleteRow != 1) {
-            throw new IllegalStateException("커뮤니티 삭제 중 오류가 발생하였습니다.");
+        // 댓글을 지우기 전에 기존 신고 이력 보존 정책부터 검사한다.
+        if (communityMapper.existsReportHistory(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "신고 이력이 있는 게시글은 삭제할 수 없습니다."
+            );
+        }
+
+        /*
+         * 일반 댓글·대댓글·논리 삭제된 댓글까지 함께 정리한다.
+         * 댓글이 없는 게시글은 0건이 정상 결과이므로 1건 여부를 검사하지 않는다.
+         */
+        commentMapper.deleteByCommunityId(id);
+
+        int deletedRows = communityMapper.delete(userId, id);
+
+        if (deletedRows == 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "게시글 상태가 변경되어 삭제하지 못했습니다. 다시 조회해 주세요."
+            );
+        }
+
+        if (deletedRows != 1) {
+            throw new IllegalStateException(
+                    "게시글 삭제 중 예상하지 못한 처리 건수가 발생했습니다."
+            );
         }
     }
 

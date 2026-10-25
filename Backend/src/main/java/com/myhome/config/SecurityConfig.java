@@ -59,12 +59,15 @@ public class SecurityConfig  {
                                 "/api/auth/signup/email-verifications/confirm",
                                 "/api/auth/password-reset"
                         ).permitAll()
-                        // CSRF 토큰과 커뮤니티 목록·상세 조회는 비로그인 사용자도 접근할 수 있다.
+                        // CSRF 토큰과 공개 게시글·댓글·대댓글 조회는 비로그인 사용자도 허용한다.
+                        // GET 요청의 지정 경로만 공개하며 등록·수정·삭제 권한은 해제하지 않는다.
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/auth/csrf",
                                 "/api/community",
-                                "/api/community/{id}"
+                                "/api/community/{id}",
+                                "/api/community/{communityId}/comments",
+                                "/api/community/{communityId}/comments/{parentId}/replies"
                         ).permitAll()
                         // 관리자 API는 ADMIN 권한을 가진 사용자만 접근할 수 있다.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
