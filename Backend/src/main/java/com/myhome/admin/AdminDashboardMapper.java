@@ -6,6 +6,10 @@ import org.apache.ibatis.annotations.Select;
 import java.util.List;
 import java.time.LocalDateTime;
 
+/**
+ * 회원·신고·게시글 테이블에서 관리자 통계를 조회한다.
+ * COUNT_BIG으로 조회한 건수는 Java의 long으로 받는다.
+ */
 @Mapper
 public interface AdminDashboardMapper {
 

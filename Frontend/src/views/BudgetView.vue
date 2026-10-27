@@ -16,7 +16,8 @@ interface Budget {
   remainingAmount: number | null // 잔여 예산: 초과하면 음수
 }
 
-// 비로그인 체험 상태에서만 사용한다.
+// 비로그인 사용자는 샘플 예산을 조회한다.
+// 체험 상태에서 저장·삭제하려고 하면 공통 가드가 변경을 막는다.
 const isDemo = ref(false)
 const { canModify } = useDemoGuard(isDemo)
 
@@ -30,7 +31,8 @@ const busy = ref(false) // 조회·저장·삭제 처리 여부
 const notice = ref('') // 처리 성공 메시지
 const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
-// 수정 취소 시 입력값을 마지막으로 조회한 예산 금액으로 되돌린다.
+// 저장 전 입력을 마지막으로 조회한 예산 금액으로 되돌린다.
+// 0원은 유지하고, 예산이 없으면 입력창을 비운다.
 function resetAmount() {
   amount.value = budget.value?.budgetAmount ?? ''
 }
@@ -42,6 +44,8 @@ async function refreshBudget() {
   amount.value = ''
   isDemo.value = false
 
+  // 실제 예산을 요청하고, 401 응답인 경우에만 체험 데이터를 사용한다.
+  // 서버 오류나 통신 오류는 체험 데이터로 바꾸지 않고 오류로 처리한다.
   const result = await requestWithDemo<Budget>(
     `/api/budgets/${month.value}`,
     () => createDemoData(month.value).budget,
@@ -89,13 +93,16 @@ async function saveBudget() {
   errorMessage.value = ''
   notice.value = ''
 
-  // 빈 입력과 숫자가 아닌 값, 음수 금액을 차단한다.
+  // 빈 입력과 숫자가 아닌 값, 음수를 먼저 차단한다.
+  // 허용 자릿수와 소수점 자리수는 백엔드에서 검사한다.
   const value = Number(amount.value)
   if (String(amount.value).trim() === '' || !Number.isFinite(value) || value < 0) {
     errorMessage.value = '0 이상의 예산 금액을 입력해 주세요.'
     return
   }
 
+  // 조회 결과의 등록 여부로 신규 등록과 수정을 구분한다.
+  // 금액이 0원인지로 판단하면 등록된 예산을 미등록으로 오해할 수 있다.
   const configured = budget.value.configured
   busy.value = true
 
@@ -110,6 +117,7 @@ async function saveBudget() {
     notice.value = configured ? '예산이 수정됐습니다.' : '예산이 등록됐습니다.'
 
     // 저장된 예산과 다시 계산된 잔액을 조회한다.
+    // 여기서 조회에 실패해도 이미 성공한 저장이 취소되는 것은 아니다.
     await refreshBudget()
   } catch (error: unknown) {
     showError(error)
@@ -137,6 +145,7 @@ async function deleteBudget() {
     notice.value = '예산이 삭제됐습니다. 지출 내역은 유지됩니다.'
 
     // 삭제 후 미등록 상태와 지출 합계를 다시 조회한다.
+    // 재조회에 실패해도 이미 완료된 삭제가 취소되는 것은 아니다.
     await refreshBudget()
   } catch (error: unknown) {
     showError(error)
@@ -205,6 +214,7 @@ onMounted(loadBudget)
       </div>
     </section>
 
+    <!-- 조회 결과가 있을 때만 예산 현황과 입력 폼을 표시한다. -->
     <template v-if="budget">
       <section class="card" aria-labelledby="budget-summary-heading">
         <div class="card-heading">
@@ -220,6 +230,7 @@ onMounted(loadBudget)
         <dl class="budget-summary">
           <div class="summary-item">
             <dt>예산 금액</dt>
+            <!-- 잔여 예산이 음수이면 초과 상태를 색상으로 강조한다. -->
             <dd>{{ money(budget.budgetAmount) }}</dd>
           </div>
 
@@ -248,6 +259,7 @@ onMounted(loadBudget)
         </p>
       </section>
 
+      <!-- 예산 등록 여부에 따라 같은 입력 폼을 등록용 또는 수정용으로 사용한다. -->
       <form class="card" @submit.prevent="saveBudget">
         <div class="card-heading">
           <div class="heading-title">

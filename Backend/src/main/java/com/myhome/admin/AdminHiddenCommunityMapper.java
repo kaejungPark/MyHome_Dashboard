@@ -7,6 +7,10 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/**
+ * 숨김 게시글을 조회하고 숨김 상태를 해제한다.
+ * 기존 신고 처리 이력은 변경하지 않는다.
+ */
 @Mapper
 public interface AdminHiddenCommunityMapper {
 

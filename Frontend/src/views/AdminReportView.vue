@@ -7,31 +7,35 @@ import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
 
-// 신고 상태와 검색·처리에 사용할 값을 구분한다.
+// DB에 저장되는 신고 상태: 대기, 수용, 기각.
 type ReportStatus = 'PENDING' | 'RESOLVED' | 'REJECTED'
+
+// 검색에서는 모든 상태를 조회하는 ALL도 허용한다.
 type SearchStatus = 'ALL' | ReportStatus
+
+// 관리자가 처리할 때는 수용 또는 기각만 선택할 수 있다.
 type ProcessStatus = 'RESOLVED' | 'REJECTED'
 
 // 신고 목록의 한 항목이다.
 interface AdminReport {
-  id: number
-  communityId: number
-  title: string
-  reporterNickname: string
-  reason: string
-  status: ReportStatus
-  createdDt: string
+  id: number // 신고 ID
+  communityId: number // 신고 대상 게시글 ID
+  title: string // 신고 대상 게시글 제목
+  reporterNickname: string // 신고한 사용자 닉네임
+  reason: string // 신고 사유 코드. 화면에서는 한글 명칭으로 변환
+  status: ReportStatus // 현재 신고 처리 상태
+  createdDt: string // 신고 접수 시각(UTC)
 }
 
-// 신고 설명, 게시글 내용, 처리 이력을 포함한 상세 응답이다.
+// 목록의 기본 정보에 신고 설명과 처리 이력을 추가한 상세 정보다.
 interface AdminReportDetail extends AdminReport {
-  description: string | null
-  content: string
-  authorNickname: string
-  isHidden: boolean
-  processedBy: number | null
-  processedDt: string | null
-  processNote: string | null
+  description: string | null // 신고자의 상세 설명
+  content: string // 신고 대상 게시글 본문
+  authorNickname: string // 게시글 작성자 닉네임
+  isHidden: boolean // 게시글의 현재 숨김 여부
+  processedBy: number | null // 처리한 관리자 ID
+  processedDt: string | null // 처리 시각(UTC)
+  processNote: string | null // 관리자가 남긴 처리 의견
 }
 
 const baseUrl = '/api/admin/community/reports'
@@ -41,8 +45,10 @@ const reports = ref<AdminReport[]>([])
 const loading = ref(false)
 const { errorMessage, showError } = useErrorMessage('신고 목록을 불러오지 못했습니다.')
 
-// 선택 중인 검색 조건과 실제 조회에 적용한 조건을 분리한다.
+// 사용자가 선택창에서 고른 값이다. 아직 검색에 반영되지 않을 수 있다.
 const searchStatus = ref<SearchStatus>('PENDING')
+
+// 조회 버튼을 눌러 확정한 조건이다. 페이지 이동 시에도 이 값을 사용한다.
 const appliedStatus = ref<SearchStatus>('PENDING')
 
 const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
@@ -145,6 +151,7 @@ async function changePage(targetPage: number) {
 async function openReportDetail(reportId: number) {
   if (loading.value || processing.value) return
 
+  // 이번 요청 번호를 저장해 나중에 도착한 응답이 최신 요청인지 확인한다.
   const requestSequence = ++detailRequestSequence
 
   selectedReportId.value = reportId
@@ -158,6 +165,8 @@ async function openReportDetail(reportId: number) {
   try {
     const result = await request<AdminReportDetail>(`${baseUrl}/${reportId}`)
 
+    // 다른 신고를 선택했거나 상세를 닫았다면 이전 응답은 표시하지 않는다.
+    // 서버 요청 자체를 취소하는 것은 아니다.
     if (requestSequence !== detailRequestSequence) return
 
     if (result === null) {
@@ -170,6 +179,7 @@ async function openReportDetail(reportId: number) {
 
     showDetailError(error)
   } finally {
+    // 이전 요청이 현재 요청의 로딩 표시를 끄지 않도록 최신 요청만 처리한다.
     if (requestSequence === detailRequestSequence) {
       detailLoading.value = false
     }

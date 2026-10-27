@@ -19,10 +19,11 @@ import org.springframework.security.web.authentication.logout.CookieClearingLogo
 import com.myhome.auth.password.PasswordResetService;
 
 /**
- * 회원가입, CSRF 토큰 조회, 로그인 사용자 조회 API를 제공한다.
+ * 회원가입, 로그인 사용자 조회, 회원 정보 수정과 비밀번호 변경을 제공한다.
+ * 데이터 변경 요청에 필요한 CSRF 토큰도 반환한다.
  *
- * 로그인과 로그아웃 요청은 SecurityConfig에 설정된
- * Spring Security 필터가 처리하므로 이 컨트롤러에는 구현하지 않는다.
+ * 로그인·로그아웃 API 요청은 이 컨트롤러가 아니라
+ * SecurityConfig에 설정한 Spring Security 필터에서 처리한다.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -46,11 +47,10 @@ public class AuthController {
     }
 
     /**
-     * 이메일, 비밀번호, 닉네임을 JSON으로 받아 회원가입을 처리한다.
-     *
-     * @Valid로 SignupRequest의 필수값·이메일 형식·길이를 검사하고,
-     * 서비스에서 이메일 중복 확인과 비밀번호 해시 처리를 수행한다.
-     * 가입 성공 시 HTTP 201을 반환하며, 자동으로 로그인하지는 않는다.
+     * 이메일 인증을 완료한 사용자의 회원가입을 처리한다.
+     * 입력 형식은 @Valid로 검사하고, 이메일 중복과 인증 확인값은 서비스에서 검사한다.
+     * 가입 성공 시 HTTP 201을 반환한다.
+     * 자동 로그인은 이 API가 아니라 프론트의 별도 로그인 요청으로 처리한다.
      */
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<Void>> signup(
@@ -132,8 +132,10 @@ public class AuthController {
         // 서비스 호출이 정상 종료되면 DB 트랜잭션도 완료된 상태다.
         String nickname = authService.updateProfile(loginUser.getId(), request);
 
+        // 저장된 닉네임을 반영한 새 로그인 사용자 정보를 만든다.
         LoginUser updatedUser = loginUser.withNickname(nickname);
 
+        // 로그인 권한은 유지하고 사용자 정보만 교체한다.
         UsernamePasswordAuthenticationToken updatedAuthentication =
                 new UsernamePasswordAuthenticationToken(
                         updatedUser,
@@ -148,6 +150,7 @@ public class AuthController {
         context.setAuthentication(updatedAuthentication);
 
         SecurityContextHolder.setContext(context);
+        // 변경한 인증 정보를 세션에도 저장해 다음 요청에서 사용하도록 한다.
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
 
         return ApiResponse.success(null);

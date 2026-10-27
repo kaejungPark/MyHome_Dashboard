@@ -7,6 +7,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 관리자 대시보드의 통계 조회 요청을 받는다.
+ * 관리자 접근 권한은 SecurityConfig에서 검사한다.
+ */
 @RestController
 @RequestMapping("/api/admin/dashboard")
 public class AdminDashboardController {

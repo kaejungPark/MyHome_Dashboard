@@ -4,8 +4,9 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 /**
- * 로그인에 필요한 이메일과 비밀번호를 받는다.
- * 비밀번호는 저장된 해시와 비교하며 로그에 남기지 않는다.
+ * 이메일과 비밀번호를 표현하는 요청 형식이다.
+ * 현재 로그인은 Spring Security의 폼 로그인으로 처리하므로 이 record를 사용하지 않는다.
+ * 따라서 여기에 선언한 검증 조건도 현재 로그인 요청에는 적용되지 않는다.
  */
 public record LoginRequest(
 

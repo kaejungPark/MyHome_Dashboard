@@ -7,6 +7,10 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import java.time.LocalDateTime;
 
+/**
+ * 회원 정보와 로그인 검증에 필요한 데이터를 조회·저장한다.
+ * 비밀번호 해시가 포함된 조회 결과는 서버 내부에서만 사용한다.
+ */
 @Mapper
 public interface AuthMapper {
 
@@ -58,7 +62,9 @@ public interface AuthMapper {
     int updateLastLoginDt(@Param("userId") Long userId);
 
     /**
-     * 본인의 회원 정보와 현재 이메일 인증 상태를 조회한다.
+     * 본인의 회원 정보와 이메일 알림 수신 동의를 조회한다.
+     * 이메일 인증 완료 시각이 있으면 emailVerified를 true로 반환한다.
+     * 이메일 인증 여부와 알림 수신 동의는 서로 다른 값이다.
      */
     @Select("""
     SELECT
@@ -138,6 +144,7 @@ public interface AuthMapper {
      * 기존 세션은 이전 버전을 가지고 있으므로 다음 요청부터 거절된다.
      *
      * @return 정상 변경 시 1, 변경 조건을 만족하지 않으면 0
+     * 비밀번호 해시는 대소문자까지 정확하게 비교하도록 BIN2 비교 규칙을 사용한다.
      */
     @Update("""
     UPDATE dbo.[USER]
@@ -159,6 +166,7 @@ public interface AuthMapper {
      * 이메일 인증을 완료한 회원의 가입 정보를 저장한다.
      * 인증 완료 시각은 서버에서 검증한 이력의 값을 사용한다.
      * 권한과 계정 상태는 서버에서 USER·ACTIVE로 지정한다.
+     * 반환값은 생성된 회원 ID가 아니라 저장된 행 수다.
      */
     @Insert("""
     INSERT INTO dbo.[USER] (

@@ -3,12 +3,12 @@ import { computed, onMounted, ref } from 'vue'
 import { request } from '../api/client'
 import { ShieldCheck, Users, UserPlus, Flag, EyeOff } from '@lucide/vue'
 
-// 관리자 대시보드의 기본 통계 응답이다.
+// 관리자 대시보드 상단 카드에 표시할 통계다.
 interface AdminDashboardResponse {
-  totalUserCount: number
-  todaySignupCount: number
-  pendingReportCount: number
-  hiddenCommunityCount: number
+  totalUserCount: number // 탈퇴 회원을 제외한 전체 회원 수
+  todaySignupCount: number // 한국 시간 기준 오늘 가입한 회원 수
+  pendingReportCount: number // 처리 대기 신고 수
+  hiddenCommunityCount: number // 현재 숨김 상태인 게시글 수
 }
 
 // 통계가 조회되기 전에는 null을 유지하여 실제 0건과 구분한다.
@@ -16,10 +16,10 @@ const dashboard = ref<AdminDashboardResponse | null>(null)
 const loading = ref(false)
 const errorMessage = ref('')
 
-// 한국 날짜 기준의 날짜별 가입자 수다.
+// 최근 7일 그래프에서 날짜 하나에 해당하는 데이터다.
 interface AdminSignupTrendResponse {
-  date: string
-  signupCount: number
+  date: string // 한국 날짜 문자열. 예: 2026-10-28
+  signupCount: number // 해당 날짜의 가입자 수
 }
 
 const signupTrend = ref<AdminSignupTrendResponse[]>([])
@@ -29,7 +29,8 @@ const totalSignupCount = computed(() =>
   signupTrend.value.reduce((total, item) => total + item.signupCount, 0),
 )
 
-// 모든 날짜가 0명인 경우에도 나눗셈이 가능하도록 최솟값을 1로 둔다.
+// 가장 많은 가입자 수를 그래프 높이의 기준으로 사용한다.
+// 모든 날짜가 0명이어도 0으로 나누지 않도록 최소 1을 사용한다.
 const maxSignupCount = computed(() =>
   Math.max(1, ...signupTrend.value.map((item) => item.signupCount)),
 )
@@ -52,6 +53,8 @@ async function loadData() {
   signupTrend.value = []
 
   try {
+    // 두 API를 함께 요청한다.
+    // 반환 결과는 요청 순서대로 기본 통계와 가입 추이에 담긴다.
     const [dashboardResult, trendResult] = await Promise.all([
       request<AdminDashboardResponse>('/api/admin/dashboard'),
       request<AdminSignupTrendResponse[]>('/api/admin/dashboard/signup-trend'),
@@ -183,6 +186,7 @@ onMounted(loadData)
             <span class="signup-chart-count"> {{ item.signupCount.toLocaleString() }}명 </span>
 
             <div class="signup-chart-track" aria-hidden="true">
+              <!-- 해당 날짜의 가입자 수를 최댓값과 비교해 막대 높이를 정한다. -->
               <div
                 class="signup-chart-bar"
                 :style="{

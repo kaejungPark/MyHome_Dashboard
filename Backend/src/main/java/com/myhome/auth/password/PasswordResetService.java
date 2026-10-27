@@ -231,6 +231,8 @@ public class PasswordResetService {
             String email,
             String password
     ) {
+        // 아래 블록의 DB 작업을 하나의 트랜잭션으로 처리한다.
+        // 검증 실패 시에도 오입력 횟수는 저장해야 하므로 인증 예외는 블록 밖에서 발생시킨다.
         LoginUser result = transactions.execute(status -> {
             AuthUser found = authMapper.findByEmail(email);
 

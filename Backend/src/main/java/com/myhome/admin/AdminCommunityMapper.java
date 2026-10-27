@@ -7,13 +7,16 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/**
+ * 신고 목록·상세 정보를 조회하고 신고 처리 결과와 게시글 숨김 상태를 저장한다.
+ */
 @Mapper
 public interface AdminCommunityMapper {
 
     /**
-     * 상태 조건에 맞는 신고 내역 전체 수를 조회한다.
-     * status가 ALL인 경우 전체 개수를 반환한다.
-     * statusType이 ALL이면 상태 조건을 적용하지 않는다.
+     * 검색 조건에 맞는 전체 신고 수를 조회한다.
+     * statusType이 ALL이면 신고 상태와 관계없이 조회한다.
+     * 화면의 전체 건수와 페이지 수를 계산할 때 사용한다.
      */
     @Select("""
     <script>
@@ -32,9 +35,9 @@ public interface AdminCommunityMapper {
     );
 
     /**
-     * 상태 조건에 맞는 신고 내역을 최신순으로 페이지 조회한다.
-     * status가 ALL인 경우 전체 목록을 조회한다.
-     * statusType이 ALL이면 상태 조건을 적용하지 않는다.
+     * 검색 조건에 맞는 신고를 최신순으로 조회한다.
+     * statusType이 ALL이면 신고 상태로 제한하지 않는다.
+     * offset개를 건너뛴 뒤 size개만 가져온다.
      */
     @Select("""
     <script>
@@ -97,6 +100,7 @@ public interface AdminCommunityMapper {
     /**
      * 처리 대기 신고에만 처리 결과와 관리자 정보를 저장한다.
      * 이미 처리된 신고는 변경하지 않고 0을 반환한다.
+     * 반환값은 처리한 신고의 ID가 아니라 변경된 행 수다.
      */
     @Update("""
         UPDATE dbo.COMMUNITY_REPORT

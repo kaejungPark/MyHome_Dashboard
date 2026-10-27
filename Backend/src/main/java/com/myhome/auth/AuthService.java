@@ -12,9 +12,14 @@ import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDateTime;
 
+/**
+ * 회원가입, 회원 정보 조회·수정, 일반 비밀번호 변경을 처리한다.
+ * 이메일 인증과 회원 상태를 확인하고 비밀번호는 해시로 변환해 저장한다.
+ */
 @Service
 public class AuthService {
 
+    // 회원 테이블 조회와 저장에 사용하는 매퍼다.
     private final AuthMapper authMepper;
 
     // SecurityConfig에 등록한 비밀번호 해시 처리 도구다.
@@ -54,7 +59,8 @@ public class AuthService {
             );
         }
 
-        // 비밀번호의 공백도 실제 입력값이므로 trim하지 않는다.
+        // 비밀번호의 공백도 실제 값이므로 trim하지 않는다.
+        // BCrypt 입력 제한에 맞춰 문자 수와 별도로 UTF-8 바이트 수를 검사한다.
         if (request.password().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -62,7 +68,8 @@ public class AuthService {
             );
         }
 
-        // 인증 이력 잠금을 잡기 전에 비밀번호 해시를 생성한다.
+        // 원문 대신 DB에 저장할 비밀번호 해시를 만든다.
+        // 인증 이력 잠금을 오래 유지하지 않도록 잠금 전에 처리한다.
         String passwordHash = passwordEncoder.encode(request.password());
 
         // 이메일 일치·인증 완료·유효기간·미사용 여부를 검증한다.
@@ -100,6 +107,7 @@ public class AuthService {
             );
         }
 
+        // 회원 한 명을 등록하므로 정상 저장 건수는 1건이어야 한다.
         if (insertedRows != 1) {
             throw new IllegalStateException(
                     "회원가입 중 오류가 발생했습니다."
@@ -134,6 +142,7 @@ public class AuthService {
      */
     @Transactional
     public String updateProfile(Long userId, ProfileUpdateRequest request) {
+        // 로그인 이후 계정 상태가 바뀌었을 수 있으므로 DB에서 다시 확인한다.
         requireActiveUser(userId);
 
         String name = request.name() == null || request.name().isBlank()
@@ -171,6 +180,8 @@ public class AuthService {
      * 기존 로그인 세션은 이후 요청부터 유효하지 않게 된다.
      *
      * 트랜잭션 완료 후 컨트롤러에서 현재 로그인 세션을 종료한다.
+     * 입력한 현재 비밀번호가 DB에 저장된 해시와 일치하는지 확인한다.
+     * 비밀번호 해시를 원문으로 복원해서 비교하는 방식은 아니다.
      */
     @Transactional
     public void changePassword(Long userId, PasswordChangeRequest request) {

@@ -4,17 +4,17 @@ import { RouterLink } from 'vue-router'
 import { UserPlus } from '@lucide/vue'
 import { request } from '../api/client'
 
-// 인증번호 발송 API의 응답이다. 시간은 UTC ISO 문자열로 전달된다.
+// 인증번호 발송 후 서버가 반환하는 정보다.
 interface SignupEmailSendResponse {
-  requestId: string
-  expiresAt: string
-  resendAvailableAt: string
+  requestId: string // 어떤 발급 요청의 인증번호인지 구분하는 값
+  expiresAt: string // 인증번호 만료 시각
+  resendAvailableAt: string // 인증번호를 다시 요청할 수 있는 시각
 }
 
-// 인증 성공 후 회원가입에 사용할 일회용 확인값이다.
+// 인증번호 확인 성공 후 회원가입 요청에 사용할 정보다.
 interface SignupEmailConfirmResponse {
-  verificationToken: string
-  expiresAt: string
+  verificationToken: string // 회원가입할 때 제출하는 일회용 인증 확인값
+  expiresAt: string // 가입 확인값의 만료 시각
 }
 
 const verificationUrl = '/api/auth/signup/email-verifications'
@@ -73,6 +73,7 @@ onUnmounted(() => {
   }
 })
 
+// 가입·인증번호 발송·인증 확인이 겹쳐 실행되지 않도록 공통 상태로 묶는다.
 const busy = computed(() => saving.value || sendingCode.value || confirmingCode.value)
 
 // 서버와 같은 방식으로 이메일을 정규화한다.
@@ -87,14 +88,17 @@ const isEmailVerified = computed(
     proofExpiresAt.value > now.value,
 )
 
+// 인증번호를 입력할 수 있는 남은 시간이다.
 const codeRemainingSeconds = computed(() =>
   Math.max(0, Math.ceil((codeExpiresAt.value - now.value) / 1000)),
 )
 
+// 인증 완료 후 회원가입을 마쳐야 하는 남은 시간이다.
 const proofRemainingSeconds = computed(() =>
   Math.max(0, Math.ceil((proofExpiresAt.value - now.value) / 1000)),
 )
 
+// 인증번호 재발송 버튼을 누를 수 있을 때까지 남은 시간이다.
 const resendRemainingSeconds = computed(() =>
   Math.max(0, Math.ceil((resendAvailableAt.value - now.value) / 1000)),
 )

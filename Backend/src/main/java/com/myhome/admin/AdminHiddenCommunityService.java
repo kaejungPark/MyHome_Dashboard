@@ -10,6 +10,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+/**
+ * 숨김 게시글을 조회하고 다시 공개하는 처리를 담당한다.
+ * 게시글이 없거나 이미 공개된 경우를 구분해 안내한다.
+ */
 @Service
 public class AdminHiddenCommunityService {
 
@@ -33,10 +37,14 @@ public class AdminHiddenCommunityService {
         // 기존 공통 검증과 계산 로직을 사용한다.
         PageValidator.validate(page, size);
 
+        // 요청한 페이지 앞에 있는 게시글 수를 계산한다.
         long offset = PageUtils.calculateOffset(page, size);
+
+        // 숨김 게시글의 전체 건수와 전체 페이지 수를 계산한다.
         long totalCount = adminHiddenCommunityMapper.countHidden();
         long totalPages = PageUtils.calculateTotalPages(totalCount, size);
 
+        // 요청한 페이지에 데이터가 없으면 DB 목록 조회 없이 빈 목록을 반환한다.
         List<AdminHiddenCommunityListResponse> items =
                 offset >= totalCount
                         ? List.of()
@@ -105,6 +113,7 @@ public class AdminHiddenCommunityService {
             );
         }
 
+        // 게시글 하나만 숨김 해제하므로 정상 변경 건수는 1건이다.
         if (updatedRows != 1) {
             throw new IllegalStateException(
                     "게시글 숨김 해제 행 수가 올바르지 않습니다."

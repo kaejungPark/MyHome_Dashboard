@@ -9,6 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import java.util.List;
 
+/**
+ * 신고 조회 조건을 검증하고 신고 수용·기각을 처리한다.
+ * 신고를 수용하면 대상 게시글도 숨긴다.
+ */
 @Service
 public class AdminCommunityService {
     private final AdminCommunityMapper adminCommunityMapper;
@@ -100,7 +104,8 @@ public class AdminCommunityService {
             Long id,
             AdminReportProcessRequest request
     ) {
-        // 기존 상세 조회 메서드에서 ID 검증과 신고 존재 여부를 확인한다.
+        // 신고 번호와 존재 여부를 확인하고 현재 처리 상태를 조회한다.
+        // 조회만으로 중복 처리를 막을 수 없으므로 아래 UPDATE에서도 상태를 검사한다.
         AdminReportDetailResponse report = getReport(id);
 
         if (!"PENDING".equals(report.status())) {
@@ -129,6 +134,7 @@ public class AdminCommunityService {
             );
         }
 
+        // 신고 하나를 처리하므로 정상 변경 건수는 반드시 1건이어야 한다.
         if (processedRows != 1) {
             throw new IllegalStateException("신고 처리 행 수가 올바르지 않습니다.");
         }

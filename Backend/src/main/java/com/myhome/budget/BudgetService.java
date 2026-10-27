@@ -9,6 +9,10 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 
+/**
+ * 월별 예산을 관리하고 실제 지출을 이용해 잔여 예산을 계산한다.
+ * 예산을 등록하지 않은 상태와 0원으로 등록한 상태를 구분한다.
+ */
 @Service
 public class BudgetService {
 
@@ -21,13 +25,22 @@ public class BudgetService {
     /** 월 예산과 지출 합계를 조회해 잔여 금액을 계산한다. */
     @Transactional(readOnly = true)
     public BudgetResponse getBudget(Long userId, String monthText) {
+        // 입력한 연도-월 형식을 검증하고 날짜 계산에 사용할 값으로 변환한다.
         YearMonth month = MonthValidator.parseMonth(monthText);
-        // 예산 월은 해당 월 1일로 조회하며, 미등록이면 null을 받는다.
+        // 예산 월은 해당 월의 1일로 저장하므로 같은 기준으로 조회한다.
+        // 예산이 없으면 null, 0원으로 등록했다면 0을 받는다.
         BigDecimal budget = budgetMapper.findAmount(userId, month.atDay(1));
         // 해당 월 1일 이상, 다음 달 1일 미만의 실제 지출을 합산한다.
         BigDecimal spent = budgetMapper.sumExpenses(userId, month.atDay(1), month.plusMonths(1).atDay(1));
-        // 예산 미등록과 0원 등록을 구분하고, 예산을 초과한 잔여 금액은 음수로 반환한다.
-        return new BudgetResponse(month.toString(), budget != null, budget, spent, budget == null ? null : budget.subtract(spent));
+        // 잔여 예산은 예산 금액에서 실제 지출을 뺀 값이다.
+        // 예산 미등록이면 계산하지 않고 null, 예산 초과이면 음수를 반환한다.
+        return new BudgetResponse(
+                month.toString(),
+                budget != null,
+                budget,
+                spent,
+                budget == null ? null : budget.subtract(spent)
+        );
 
 
     }
@@ -47,6 +60,7 @@ public class BudgetService {
                     request.amount()
             );
 
+            // 월 예산 한 건을 등록하므로 정상 저장 건수는 1건이다.
             if (insertedRow != 1) {
                 throw new IllegalStateException("예산 등록 중 오류가 발생하였습니다.");
             }
@@ -76,6 +90,7 @@ public class BudgetService {
                 request.amount()
         );
 
+        // 변경된 행이 없으면 해당 사용자·월의 예산이 없는 것으로 처리한다.
         if (updatedRows == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "해당 월에 등록된 예산이 없습니다."
@@ -98,6 +113,7 @@ public class BudgetService {
 
         int deletedRows = budgetMapper.delete(userId, month.atDay(1));
 
+        // 삭제된 행이 없으면 해당 사용자·월의 예산이 없는 것으로 처리한다.
         if (deletedRows == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "해당 월에 등록된 예산이 없습니다."

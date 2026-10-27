@@ -7,20 +7,20 @@ import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
 
-// 숨김 게시글 목록의 한 항목이다.
+// 숨김 게시글 목록에 표시할 한 항목이다.
 interface HiddenCommunity {
-  id: number
-  title: string
-  authorNickname: string | null
-  createdDt: string
-  hiddenBy: number | null
-  hiddenDt: string | null
+  id: number // 게시글 ID
+  title: string // 게시글 제목
+  authorNickname: string | null // 작성자 닉네임. 없으면 null
+  createdDt: string // 게시글 작성 시각(UTC)
+  hiddenBy: number | null // 숨김 처리한 관리자 ID
+  hiddenDt: string | null // 숨김 처리 시각(UTC)
 }
 
-// 본문과 현재 숨김 여부를 포함한 상세 응답이다.
+// 목록 정보에 본문과 현재 숨김 상태를 추가한 상세 정보다.
 interface HiddenCommunityDetail extends HiddenCommunity {
-  content: string
-  isHidden: boolean
+  content: string // 게시글 본문
+  isHidden: boolean // true이면 숨김, false이면 공개 상태
 }
 
 const baseUrl = '/api/admin/community/hidden'
@@ -90,6 +90,7 @@ async function loadData() {
       throw new Error('숨김 게시글 목록 정보를 받지 못했습니다.')
     }
 
+    // 조회한 게시글 목록과 페이지 정보를 각각 화면 상태에 반영한다.
     communities.value = result.items
     applyPage(result)
   } catch (error: unknown) {

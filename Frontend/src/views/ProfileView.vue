@@ -7,23 +7,23 @@ import { useErrorMessage } from '../composables/useErrorMessage'
 
 type Gender = 'MALE' | 'FEMALE'
 
-// 서버에서 조회하는 본인의 회원 정보다.
+// 회원 정보 수정 화면에서 조회하는 본인의 정보다.
 interface ProfileResponse {
-  email: string
-  name: string | null
-  nickname: string
-  age: number | null
-  gender: Gender | null
-  emailVerified: boolean // 서버에서 조회한 인증 여부. 이 화면에서 변경하지 않는다.
-  emailNotificationEnabled: boolean // 조회한 수신 동의 값. 체크 변경 후 저장해야 반영된다.
+  email: string // 로그인 이메일. 이 화면에서는 변경하지 않는다.
+  name: string | null // 선택 입력 이름
+  nickname: string // 화면에 표시할 닉네임
+  age: number | null // 선택 입력 나이
+  gender: Gender | null // 선택 입력 성별
+  emailVerified: boolean // 서버에서 확인한 이메일 인증 여부
+  emailNotificationEnabled: boolean // 저장된 이메일 알림 수신 동의
 }
 
 const router = useRouter()
 
-const loading = ref(false)
-const loaded = ref(false)
-const saving = ref(false)
-const notice = ref('')
+const loading = ref(false) // 회원 정보를 조회하는 중인지 표시
+const loaded = ref(false) // 조회에 성공했는지 표시. 성공 전에는 저장을 막는다.
+const saving = ref(false) // 회원 정보 저장 중 중복 요청 방지
+const notice = ref('') // 회원 정보 저장 성공 안내
 
 const { errorMessage, showError } = useErrorMessage('회원 정보를 처리하지 못했습니다.')
 
@@ -42,7 +42,7 @@ const form = reactive({
 // 비밀번호 변경은 회원 정보 수정과 별도의 상태로 관리한다.
 const passwordDialog = ref<HTMLDialogElement | null>(null)
 const changingPassword = ref(false)
-const passwordChanged = ref(false)
+const passwordChanged = ref(false) // 비밀번호 변경 성공 후 화면 이동 전까지 재요청을 막는다.
 
 const passwordForm = reactive({
   currentPassword: '',
@@ -60,6 +60,7 @@ const busy = computed(() => loading.value || saving.value || changingPassword.va
  * 인증 여부는 안내에만 사용하고 수신 동의와 별도로 관리한다.
  */
 function applyProfile(profile: ProfileResponse) {
+  // DB의 null 값은 입력창에서 사용할 빈 값으로 바꾼다.
   form.email = profile.email
   form.name = profile.name ?? ''
   form.nickname = profile.nickname
@@ -178,6 +179,7 @@ function clearPasswordForm() {
   passwordError.value = ''
 }
 
+// 이전 비밀번호 입력을 비우고 변경 팝업을 연다.
 function openPasswordDialog() {
   if (busy.value || !loaded.value) return
 
@@ -186,6 +188,7 @@ function openPasswordDialog() {
   passwordDialog.value?.showModal()
 }
 
+// 변경 요청 중에는 닫지 않고, 닫을 때 비밀번호 입력을 비운다.
 function closePasswordDialog() {
   if (changingPassword.value) return
 
@@ -269,6 +272,7 @@ async function changePassword() {
   }
 }
 
+// 화면에 처음 들어오면 저장된 회원 정보를 조회한다.
 onMounted(loadData)
 </script>
 

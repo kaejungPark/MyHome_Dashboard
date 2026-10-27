@@ -7,6 +7,10 @@ import com.myhome.auth.LoginUser;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
+/**
+ * 관리자 신고 목록·상세 조회와 신고 처리 요청을 받는다.
+ * 관리자 접근 권한은 SecurityConfig에서 검사한다.
+ */
 @RestController
 @RequestMapping("/api/admin/community/reports")
 public class AdminCommunityController {

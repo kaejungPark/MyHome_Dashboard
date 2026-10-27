@@ -9,6 +9,10 @@ import java.util.Map;
 
 import java.time.*;
 
+/**
+ * 관리자 통계를 조회하고 가입자가 없는 날짜의 인원수를 0명으로 채운다.
+ * 날짜 집계는 한국 시간을 기준으로 한다.
+ */
 @Service
 public class AdminDashboardService {
     private final AdminDashboardMapper adminDashboardMapper;
@@ -44,14 +48,20 @@ public class AdminDashboardService {
                 .toLocalDateTime();
 
 
+        // 탈퇴한 회원을 제외한 전체 회원 수를 조회한다.
         long totalUserCount = adminDashboardMapper.getTotalUserCount();
 
-        long todaySignupCount = adminDashboardMapper.getTodaySignupCount(startUtc, endUtc);
+        // 한국 시간 기준 오늘 가입한 회원 수를 조회한다.
+        long todaySignupCount =
+                adminDashboardMapper.getTodaySignupCount(startUtc, endUtc);
 
+        // 아직 관리자가 처리하지 않은 신고 수를 조회한다.
         long pendingReportCount = adminDashboardMapper.getPendingReportCount();
 
+        // 현재 일반 사용자에게 공개되지 않는 숨김 게시글 수를 조회한다.
         long hiddenCommunityCount = adminDashboardMapper.getHiddenCommunityCount();
 
+        // 조회한 네 가지 통계를 하나의 응답으로 묶어 반환한다.
         return new AdminDashboardResponse(
                 totalUserCount,
                 todaySignupCount,
@@ -78,6 +88,8 @@ public class AdminDashboardService {
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
 
+        // DB에서 날짜별 가입자 수를 조회한다.
+        // 가입자가 없는 날짜는 조회 결과에 포함되지 않을 수 있다.
         LocalDateTime endUtc = endDate.atStartOfDay(seoulZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
@@ -97,6 +109,7 @@ public class AdminDashboardService {
 
         for (int day = 0; day < 7; day++) {
             LocalDate date = startDate.plusDays(day);
+            // 해당 날짜의 조회 결과가 없으면 가입자 수를 0명으로 처리한다.
             long signupCount = countByDate.getOrDefault(date, 0L);
 
             result.add(new AdminSignupTrendResponse(date, signupCount));
