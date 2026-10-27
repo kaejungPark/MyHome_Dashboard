@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { computed } from 'vue'
 import { MessageSquare } from '@lucide/vue'
 import { useErrorMessage } from '../composables/useErrorMessage'
+import CommunityComments from '../components/CommunityComments.vue' // 게시글에 속한 댓글·대댓글 영역을 표시한다.
 
 interface CommunityDetailResponse {
   id: number
@@ -286,6 +287,19 @@ onMounted(loadData)
         </div>
       </footer>
     </article>
+    <!--
+      게시글을 정상 조회한 경우에만 댓글을 표시한다.
+      게시글 ID가 달라지면 key가 바뀌어 댓글 상태도 새로 생성된다.
+      세션 만료 시 부모 화면의 로그인 사용자 정보를 초기화한다.
+    -->
+    <CommunityComments
+      v-if="details && !loading && !errorMessage"
+      :key="details.id"
+      :community-id="details.id"
+      :login-user-id="loginUserId"
+      :auth-error="authError"
+      @session-expired="loginUserId = null"
+    />
   </section>
 
   <!-- 네이티브 dialog로 팝업 밖의 조작을 막고 키보드 초점을 유지한다. -->
