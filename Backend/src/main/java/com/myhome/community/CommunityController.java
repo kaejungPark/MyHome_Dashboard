@@ -9,6 +9,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 커뮤니티 화면의 게시글 조회·등록·수정·삭제와 신고 요청을 받는다.
+ * 요청값을 서비스에 전달하고 처리 결과를 공통 응답 형식으로 반환한다.
+ * 작성자와 신고자는 화면에서 전달한 값이 아니라 로그인 정보로 확인한다.
+ */
 @RestController
 @RequestMapping("/api/community")
 public class CommunityController {
@@ -19,8 +24,12 @@ public class CommunityController {
     }
 
     /**
-     * 게시글 목록을 페이지 단위로 조회한다.
-     * 비로그인 사용자도 조회할 수 있으며, 기본값은 1페이지·10개다.
+     * 검색 조건에 맞는 게시글 목록을 페이지 단위로 조회한다.
+     * 비로그인 사용자도 조회할 수 있으며, 숨김 게시글은 제외한다.
+     *
+     * page와 size는 조회할 페이지 번호와 페이지당 게시글 수다.
+     * searchType은 제목(TITLE) 또는 닉네임(NICKNAME)이며,
+     * keyword가 비어 있으면 검색어 조건 없이 조회한다.
      */
     @GetMapping
     public ApiResponse<PageResponse<CommunityListResponse>> getCommunities(

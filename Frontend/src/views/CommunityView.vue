@@ -7,6 +7,8 @@ import { usePagination } from '../composables/usePagination'
 import Pagination from '../components/Pagination.vue'
 import { useErrorMessage } from '../composables/useErrorMessage'
 
+// 게시글 목록 API에서 받는 한 건의 데이터 구조다.
+// 상세 화면에서 사용하는 본문은 목록 응답에 포함하지 않는다.
 interface Community {
   id: number // 커뮤니티 ID
   title: string // 제목
@@ -18,7 +20,10 @@ interface Community {
 // 검색 기준으로 허용할 값이다.
 type SearchType = 'TITLE' | 'NICKNAME'
 
+// 현재 페이지에 표시할 게시글 목록이다.
 const communities = ref<Community[]>([])
+
+// 목록 조회 중에는 검색과 페이지 이동의 중복 요청을 막는다.
 const loading = ref(false)
 const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
@@ -51,7 +56,10 @@ async function refreshCommunity() {
   const currentKeyword = appliedKeyword.value
   const pageSize = size.value
 
+  // 지정한 페이지를 서버에서 조회한다.
+  // 최초 조회와 마지막 유효 페이지 재조회에서 같은 요청 구성을 사용한다.
   async function fetchCommunityPage(targetPage: number): Promise<PageResponse<Community>> {
+    // 검색어에 공백이나 특수문자가 있어도 URL에 안전하게 전달하도록 변환한다.
     const params = new URLSearchParams({
       page: String(targetPage),
       size: String(pageSize),
@@ -78,7 +86,10 @@ async function refreshCommunity() {
     result = await fetchCommunityPage(lastPage)
   }
 
+  // 서버가 반환한 현재 페이지의 게시글을 테이블에 표시한다.
   communities.value = result.items
+
+  // 서버의 페이지 번호와 전체 건수를 공통 페이징 상태에 반영한다.
   applyPage(result)
 }
 
@@ -118,7 +129,11 @@ async function changePage(targetPage: number) {
   await loadData()
 }
 
-// 커뮤니티 목록을 조회한다.
+/**
+ * 목록 조회 중 상태와 오류 메시지를 관리한다.
+ * 실제 조회는 refreshCommunity에 맡기고,
+ * 성공하거나 실패하더라도 마지막에 로딩 상태를 해제한다.
+ */
 async function loadData() {
   if (loading.value) return
 

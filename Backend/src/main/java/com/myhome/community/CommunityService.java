@@ -13,6 +13,11 @@ import com.myhome.community.comment.CommentMapper;
 
 import java.util.List;
 
+/**
+ * 게시글 처리에 필요한 입력값과 접근 권한을 확인한다.
+ * DB 조회·변경은 매퍼에 맡기고, 결과를 화면에 필요한 형태로 반환한다.
+ * 여러 변경을 함께 처리하는 작업은 트랜잭션으로 묶어 실패 시 되돌린다.
+ */
 @Service
 public class CommunityService {
 
@@ -59,7 +64,8 @@ public class CommunityService {
         // 검색어 앞뒤 공백을 제거한다. 빈 문자열이면 검색 조건을 적용하지 않는다.
         String searchKeyword = keyword == null ? "" : keyword.trim();
 
-        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        // 현재 페이지를 조회하기 전에 건너뛸 게시글 수를 계산한다.
+        // 예: 페이지당 10개씩 조회할 때 2페이지는 앞의 10개를 건너뛴다.
         long offset = PageUtils.calculateOffset(page, size);
 
         // 목록과 동일한 검색 조건으로 전체 게시글 수를 조회한다.
@@ -68,11 +74,14 @@ public class CommunityService {
         // 나머지가 있으면 마지막 페이지를 하나 추가한다.
         long totalPages = PageUtils.calculateTotalPages(totalCount, size);
 
-        // 검색 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
+        // 조회할 게시글이 없는 페이지는 DB 목록 조회 없이 빈 목록을 사용한다.
+        // 전체 건수와 페이지 정보는 함께 반환하므로 화면에서 페이지를 조정할 수 있다.
         List<CommunityListResponse> items = offset >= totalCount
                 ? List.of()
                 : communityMapper.findPage(type, searchKeyword, offset, size);
 
+        // 현재 페이지의 게시글과 전체 건수·페이지 수를 함께 반환한다.
+        // 화면은 items로 목록을 표시하고, 나머지 값으로 페이지 버튼을 구성한다.
         return new PageResponse<>(
                 items,
                 page,

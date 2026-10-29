@@ -5,12 +5,19 @@ import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
+/**
+ * 커뮤니티 게시글과 신고 정보를 SQL로 조회하거나 변경한다.
+ * 서비스에서 전달한 검색 조건, 로그인 사용자 ID, 입력 내용을 사용한다.
+ * 등록·수정·삭제 메서드는 실제로 처리된 행 수를 반환한다.
+ */
 @Mapper
 public interface CommunityMapper {
 
     /**
      * 숨김 게시글을 제외하고 검색 조건에 맞는 게시글 수를 조회한다.
      * 페이지 수가 목록과 일치하도록 findPage와 동일한 조건을 사용한다.
+     * CHARINDEX는 제목이나 닉네임에 검색어가 포함되어 있는지 확인한다.
+     * COUNT_BIG의 결과는 Java의 long으로 받는다.
      */
     @Select("""
     <script>
@@ -39,8 +46,12 @@ public interface CommunityMapper {
     );
 
     /**
-     * 검색 조건에 맞는 게시글을 최신순으로 페이지 조회한다. (숨김 글 제외)
-     * 본문은 제외하며, 목록 조회에서는 조회수를 증가시키지 않는다.
+     * 숨김 게시글을 제외하고 검색 조건에 맞는 목록을 조회한다.
+     * USER 테이블을 연결하여 작성자의 닉네임을 가져온다.
+     *
+     * 작성일이 최신인 순서로 정렬하며, 작성일이 같으면 ID가 큰 글을 먼저 표시한다.
+     * offset만큼 건너뛰고 size개를 조회한다.
+     * 목록에서는 본문을 가져오지 않고 조회수도 증가시키지 않는다.
      */
     @Select("""
     <script>
