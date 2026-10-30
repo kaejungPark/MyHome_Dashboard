@@ -107,6 +107,7 @@ const resendRemainingSeconds = computed(() =>
 // 가입 확인값이 만료되면 다시 발급받도록 안내한다.
 const showCodeInput = computed(() => requestId.value !== '' && verificationToken.value === '')
 
+// 발송 중인지, 인증을 완료했는지, 재발송 대기 중인지에 따라 버튼 문구를 바꾼다.
 const sendButtonText = computed(() => {
   if (sendingCode.value) return '발송 중...'
   if (isEmailVerified.value) return '인증 완료'
@@ -160,6 +161,8 @@ function formatRemaining(seconds: number): string {
   return `${minutes}:${String(rest).padStart(2, '0')}`
 }
 
+// 요청 처리에서 받은 오류 메시지를 사용하고,
+// 메시지를 읽을 수 없는 오류라면 화면별 기본 안내 문구를 사용한다.
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
@@ -200,6 +203,8 @@ async function sendVerificationCode() {
       throw new Error('인증번호 발급 정보를 확인하지 못했습니다.')
     }
 
+    // 서버에서 받은 만료·재발송 가능 시각을 숫자로 변환한다.
+    // 화면 타이머는 이 시각과 현재 시각의 차이를 계산해 남은 시간을 표시한다.
     const expiresAt = Date.parse(result.expiresAt)
     const resendAt = Date.parse(result.resendAvailableAt)
 
@@ -285,6 +290,8 @@ async function confirmVerificationCode() {
       return
     }
 
+    // 인증 성공 결과를 보관하여 회원가입 요청에 사용할 준비를 한다.
+    // 입력했던 6자리 인증번호는 더 이상 필요하지 않으므로 비운다.
     verificationToken.value = result.verificationToken
     verifiedEmail.value = email
     proofExpiresAt.value = expiresAt

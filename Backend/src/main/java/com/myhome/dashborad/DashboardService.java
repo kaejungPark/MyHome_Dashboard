@@ -15,6 +15,11 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Comparator;
 
+/**
+ * 여러 기능의 요약 정보를 모아 대시보드 응답을 만든다.
+ * 생활비 통계와 고정 지출 합계는 기존 서비스를 이용하고,
+ * 확인이 필요한 일정·물품·식재료·집안일은 매퍼로 조회한다.
+ */
 @Service
 public class DashboardService {
 
@@ -33,9 +38,11 @@ public class DashboardService {
     }
 
     /**
-     * 로그인한 사용자의 이번 달 지출·예산·고정 지출 현황을 모아 반환한다.
-     * 미완료 일정, 보증 종료 예정 물품, 미납 고정 지출을 함께 제공한다.
-     * 소비기한 확인이 필요한 식재료는 최대 3건의 목록과 전체 건수를 제공한다.
+     * 로그인한 사용자의 이번 달 지출·예산과 생활 관리 요약을 조회한다.
+     * 고정 지출 예정 합계는 실제 지출과 구분하여 제공한다.
+     *
+     * 일정·식재료·집안일·미납 항목은 대표 목록과 전체 건수를 따로 반환한다.
+     * 따라서 화면에 표시된 목록 개수와 전체 건수는 다를 수 있다.
      */
     @Transactional(readOnly = true)
     public DashboardResponse findDashboards(Long userId) {
@@ -58,13 +65,14 @@ public class DashboardService {
         // 기존 통계 서비스를 이용해 이번 달 통계를 조회한다.
         StatisticsResponse statistics = statisticsService.findStatistics(userId, month);
 
-        // 고정 지출 월별 예정 조회
+        // 이번 달에 납부하도록 예정된 고정 지출 합계다.
+        // 실제 지출 합계에 더하지 않고 별도 정보로 표시한다.
         BigDecimal recurringAmount = recurringExpenseService.getMonthlyTotalAmount(userId, month);
 
         // 기한이 지났거나 7일 이내 마감되는 미완료 일정을 최대 3건 조회한다.
         List<DashboardScheduleResponse> schedules = dashboardMapper.findSchedules(userId, sevenEndDate);
 
-        // 기한이 지났거나 7일 이내 마감되는 미완료 일정의 총 곤수를 조회한다.
+        // 화면에 표시할 최대 3건과 별도로, 같은 조건의 전체 일정 건수를 조회한다.
         int scheduleCount = dashboardMapper.countSchedules(userId, sevenEndDate);
 
         // 오늘 기준 30일 뒤까지 보증이 종료되는 미처분 물품을 최대 5개 조회한다.
@@ -99,7 +107,8 @@ public class DashboardService {
         // 화면에 표시할 3건과 별도로, 같은 조건에 해당하는 전체 건수를 조회한다.
         int householdTaskCount = dashboardMapper.countHouseholdTask(userId, sevenEndDate);
 
-        // 생활비 요약과 일정·물품·미납 항목·식재료 정보를 하나의 대시보드 응답으로 반환한다.
+        // 각 기능에서 조회한 결과를 하나의 응답으로 묶는다.
+        // 프론트엔드는 이 응답을 받아 대시보드의 요약 카드와 목록을 표시한다.
         return new DashboardResponse(
                 today,                          // 조회 기준 날짜
                 month,                          // 조회 월
@@ -152,7 +161,8 @@ public class DashboardService {
         // 1. 첫 번째 달 조회
         List<UpcomingPaymentResponse> paymentList = dashboardMapper.findPaymentByUserId(userId, today, paymentMonth);
 
-        // 2. 달이 다르면 두 번째 달도 조회해서 기존 리스트에 추가
+        // 조회 기간이 월말을 넘어가면 다음 달의 납부 예정 항목도 필요하다.
+        // 두 달을 조회하더라도 각 조회의 날짜 범위는 오늘부터 7일 뒤까지로 제한한다.
         if (!paymentMonth.equals(paymentNextMonth)) {
             List<UpcomingPaymentResponse> nextPaymentList = dashboardMapper.findPaymentByUserId(userId, today, paymentNextMonth);
             paymentList.addAll(nextPaymentList); // 리스트 합치기

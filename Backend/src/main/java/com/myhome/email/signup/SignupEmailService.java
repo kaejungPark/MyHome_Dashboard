@@ -198,6 +198,8 @@ public class SignupEmailService {
 
         lockEmail(normalizedEmail);
 
+        // 화면이 보낸 원본 확인값을 DB 저장값과 같은 방식으로 해시 처리한다.
+        // 이 해시와 이메일이 일치하는 인증 이력을 찾아 사용 완료 처리한다.
         String proofHash =
                 codeSupport.hashVerificationToken(verificationToken);
 
@@ -281,6 +283,8 @@ public class SignupEmailService {
             );
         }
 
+        // requestId는 발급 요청을 구분하는 값이다.
+        // code는 사용자가 이메일에서 확인하여 입력하는 6자리 인증번호다.
         UUID requestId = codeSupport.generateRequestId();
         String code = codeSupport.generateCode();
 
@@ -398,7 +402,9 @@ public class SignupEmailService {
             );
         }
 
-        // 인증번호와 별개의 긴 난수 확인값을 발급한다.
+        // 이메일의 6자리 인증번호 확인을 마쳤으므로 가입 확인값을 발급한다.
+        // 화면은 이 값을 보관했다가 실제 회원가입 요청에 함께 제출한다.
+        // 인증번호 확인 성공만으로 회원 계정이 생성되는 것은 아니다.
         String verificationToken =
                 codeSupport.generateVerificationToken();
 
@@ -504,6 +510,10 @@ public class SignupEmailService {
         }
     }
 
+    /**
+     * 요청을 처리할 수 없는 이유와 HTTP 상태를 담은 예외를 만든다.
+     * 호출한 위치에서 throw하여 현재 처리를 중단할 때 사용한다.
+     */
     private static ResponseStatusException failure(
             HttpStatus status,
             String message

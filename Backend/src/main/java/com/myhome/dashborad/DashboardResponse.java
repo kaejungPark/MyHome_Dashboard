@@ -4,6 +4,14 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 대시보드 화면에 필요한 요약 정보를 담는 응답이다.
+ * today와 month는 서버에서 조회에 사용한 기준 날짜와 월이다.
+ *
+ * 목록은 화면 표시 개수를 제한한 결과이며,
+ * Count로 끝나는 값은 같은 조건에 해당하는 전체 건수다.
+ * 예산 미등록 등으로 계산할 수 없는 금액과 비율은 null일 수 있다.
+ */
 public record DashboardResponse (
         LocalDate today,                                    // 조회 날짜 (당일)
         String month,                                       // 조회 월 YYYY-MM
@@ -21,7 +29,7 @@ public record DashboardResponse (
         List<DashboardIngredientResponse> ingredients,      // 소비기한 확인 대상 식재료 목록, 최대 3건
         int ingredientCount,                                // 같은 조회 조건에 해당하는 전체 식재료 건수
         List<DashboardHouseholdTaskResponse> householdTasks,// 예정일 경과·7일 이내인 활성 항목, 최대 3건
-        int householdTaskCount                              // 같은 조회 조건에 해당하는 전체 항목 건수                  //
+        int householdTaskCount                              // 같은 조회 조건에 해당하는 전체 항목 건수
 ) {
 
 }

@@ -7,6 +7,11 @@ import org.apache.ibatis.annotations.Select;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 대시보드에 필요한 요약 목록과 전체 건수를 DB에서 조회한다.
+ * 모든 조회는 사용자 ID를 조건으로 사용하여 본인 데이터만 가져온다.
+ * 목록과 건수를 함께 제공하는 기능은 두 쿼리의 조회 조건을 동일하게 유지한다.
+ */
 @Mapper
 public interface  DashboardMapper {
 
@@ -70,6 +75,9 @@ public interface  DashboardMapper {
      * 매월 납부일이 해당 월의 마지막 날을 넘으면 말일로 보정한다.
      * 보정된 납부일이 오늘부터 7일 뒤까지인 항목만 반환한다.
      * paymentMonth는 조회 대상 월의 1일이다.
+     * CROSS APPLY는 매월 납부일을 실제 날짜로 계산하는 부분이다.
+     * 예를 들어 납부일이 31일이어도 해당 월이 30일까지라면 30일로 계산한다.
+     * LEFT JOIN으로 납부 기록을 연결하고, p.ID가 없는 미납 항목만 남긴다.
      */
     @Select("""
         SELECT
@@ -110,6 +118,8 @@ public interface  DashboardMapper {
     /**
      * 보관 중인 식재료 중 소비기한이 지났거나 3일 이내인 항목을 최대 3건 조회한다.
      * ingredientEndDate는 서비스에서 계산한 오늘 기준 3일 뒤 날짜다.
+     * 소비기한의 시작 날짜를 제한하지 않아 이미 기한이 지난 항목도 포함한다.
+     * 소비 완료·폐기 상태는 제외하고 보관 중인 항목만 가져온다.
      */
     @Select("""
         SELECT TOP (3)
@@ -150,6 +160,8 @@ public interface  DashboardMapper {
      * 활성 집안일·소모품 중 예정일이 지났거나 7일 이내인 항목을 최대 3건 조회한다.
      * 예정일이 빠른 순서로 표시하며, 같은 예정일은 ID 순서로 정렬한다.
      * sevenEndDate는 서비스에서 계산한 오늘 기준 7일 뒤 날짜다.
+     * 예정일이 없는 항목은 날짜 기준으로 안내할 수 없으므로 제외한다.
+     * 비활성 항목도 대시보드의 관리 대상에서 제외한다.
      */
     @Select("""
         SELECT TOP (3)

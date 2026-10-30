@@ -15,9 +15,12 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- *  기존 회원 인증은 userId 기반 createHash()/matches()를 사용하고,
- *  가입 전 인증은 이메일 기반 createSignupHash()/matchesSignupCode()를 사용한다.
- *  두 흐름은 해시 입력 형식을 구분하며 같은 서버 비밀키를 사용한다.
+ * 이메일 인증에 필요한 난수 생성과 해시 비교를 담당한다.
+ * 해시는 원본 인증번호 대신 저장하고 비교하는 값이다.
+ *
+ * 기존 회원 인증은 사용자 ID를 기준으로,
+ * 가입 전 인증은 이메일을 기준으로 해시를 생성한다.
+ * 인증번호 확인 후 회원가입에 사용할 별도의 일회용 확인값도 생성한다.
  */
 @Component
 public class EmailVerificationCodeSupport {
@@ -29,6 +32,11 @@ public class EmailVerificationCodeSupport {
     // 환경변수에서 읽은 서버 전용 비밀키다.
     private final SecretKeySpec secretKey;
 
+    /**
+     * 환경변수에 저장한 Base64 비밀키를 읽어 인증번호 해시에 사용한다.
+     * Base64는 키를 문자열로 보관하는 형식이며 암호화 방식은 아니다.
+     * 키 형식이나 길이가 올바르지 않으면 초기화 단계에서 오류를 발생시킨다.
+     */
     public EmailVerificationCodeSupport (
             @Value("${EMAIL_VERIFICATION_HMAC_KEY}") String encodedKey
     )

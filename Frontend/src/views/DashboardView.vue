@@ -39,6 +39,7 @@ interface DashboardPayment {
   paymentDate: string
 }
 
+// 소비기한 확인 목록에 표시할 식재료 요약 정보다.
 interface DashboardIngredient {
   id: number
   name: string
@@ -46,6 +47,7 @@ interface DashboardIngredient {
   expirationDate: string
 }
 
+// 다음 예정일을 안내할 집안일·소모품의 요약 정보다.
 interface DashboardHouseholdTask {
   id: number
   name: string
@@ -88,7 +90,11 @@ function formatAmount(amount: number | null) {
   return amount === null ? '—' : amount.toLocaleString('ko-KR')
 }
 
-// 날짜 문자열을 UTC 기준으로 변환해 시간대·서머타임에 따른 차이를 방지한다.
+/**
+ * YYYY-MM-DD 날짜를 일수 계산에 사용할 숫자로 변환한다.
+ * 두 날짜를 모두 UTC 자정 기준으로 맞춰 브라우저 시간대의 영향을 줄인다.
+ * 화면의 날짜를 UTC 날짜로 바꾸려는 용도는 아니다.
+ */
 function toUtcDate(dateText: string): number {
   const [year, month, day] = dateText.split('-').map(Number)
 
@@ -99,7 +105,11 @@ function toUtcDate(dateText: string): number {
   return date.getTime()
 }
 
-// 대시보드 응답의 기준 날짜로 남은 일수를 계산해 표시된 데이터와 날짜 기준을 맞춘다.
+/**
+ * 조회 대상 날짜와 서버가 반환한 기준 날짜의 차이를 표시한다.
+ * 오늘은 D-day, 남은 날짜는 D-N, 지난 날짜는 D+N으로 표시한다.
+ * PC의 오늘 날짜 대신 응답의 today를 사용해 조회 기준과 맞춘다.
+ */
 function formatDday(targetDate: string): string {
   if (!dashboard.value) return '—'
 
@@ -111,7 +121,11 @@ function formatDday(targetDate: string): string {
   return days > 0 ? `D-${days}` : `D+${Math.abs(days)}`
 }
 
-// 공통 함수에서 실제 데이터와 체험 데이터를 구분한다.
+/**
+ * 공통 요청 함수를 통해 대시보드 정보를 가져온다.
+ * 받은 데이터는 요약 카드와 목록에 적용하고,
+ * 체험 데이터 여부는 화면의 안내 문구 표시에 사용한다.
+ */
 async function findDashboard() {
   const result = await requestWithDemo<DashboardResponse>(
     '/api/dashboard',
@@ -122,7 +136,11 @@ async function findDashboard() {
   isDemo.value = result.isDemo
 }
 
-// 로그인 상태에서는 실제 데이터, 비로그인 상태에서는 샘플을 표시한다.
+/**
+ * 기존 조회 결과를 초기화하고 대시보드를 다시 불러온다.
+ * 중복 조회를 막고, 실패하면 공통 오류 메시지를 표시한다.
+ * 성공 여부와 관계없이 마지막에 로딩 상태를 해제한다.
+ */
 async function loadData() {
   if (loading.value) return
 
@@ -166,6 +184,7 @@ onMounted(loadData)
       {{ errorMessage }}
     </p>
 
+    <!-- 응답 데이터가 있을 때만 내부 값을 읽어 요약 카드와 목록을 표시한다. -->
     <template v-else-if="dashboard">
       <!-- 상단: 이번 달 생활비·예산 요약 -->
       <section class="expense-section" aria-labelledby="expense-heading">

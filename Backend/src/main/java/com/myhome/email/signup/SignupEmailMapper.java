@@ -4,6 +4,11 @@ import org.apache.ibatis.annotations.*;
 
 import java.time.LocalDateTime;
 
+/**
+ * 회원가입 전 이메일 인증 이력을 저장하고 조회한다.
+ * 인증번호와 가입 확인값은 원문 대신 해시로 저장한다.
+ * 발급·인증 완료·사용 완료·무효화 상태를 구분하여 관리한다.
+ */
 @Mapper
 public interface SignupEmailMapper {
 
@@ -130,6 +135,7 @@ public interface SignupEmailMapper {
     /**
      * 요청 ID와 이메일이 모두 일치하는 인증 이력을 잠금 조회한다.
      * 조회 후 실패 횟수나 인증 완료 상태를 변경할 때 사용한다.
+     * 같은 인증 요청을 동시에 확인하여 실패 횟수나 완료 상태가 잘못 변경되지 않도록, 조회한 행에 변경용 잠금을 사용한다.
      */
     @Select("""
         SELECT

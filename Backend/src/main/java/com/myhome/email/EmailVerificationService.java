@@ -9,9 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * 인증번호 DB 처리와 실제 메일 발송 흐름을 연결한다.
+ * 이미 가입한 회원의 이메일 인증 DB 처리와 메일 발송을 연결한다.
+ * 회원가입 전 인증은 signup 패키지의 SignupEmailService에서 처리한다.
+ *
  * 메일 서버 응답을 기다리는 동안 DB 잠금을 유지하지 않도록
- * 이 클래스에는 트랜잭션을 적용하지 않는다.
+ * DB 작업은 별도 트랜잭션 서비스에 맡긴다.
  */
 @Service
 public class EmailVerificationService {
