@@ -44,7 +44,8 @@ const notice = ref('') // 처리 완료 메시지
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
 const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
-// 생활비 목록의 페이지 상태와 공통 처리 함수를 사용
+// 생활비 목록을 한 페이지에 5건씩 표시한다.
+// 페이지 번호·전체 건수·이동 가능 여부는 공통 페이지 처리 함수를 사용한다.
 const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, canMoveTo } =
   usePagination(5)
 
@@ -76,7 +77,7 @@ function initialForm() {
   return {
     categoryId: '',
     amount: '',
-    expenseDate: today(),
+    expenseDate: today(), // 새로 등록하거나 수정 취소할 때 지출일을 오늘로 설정한다.
     expenseType: 'VARIABLE',
     paymentMethod: '',
     title: '',
@@ -374,6 +375,7 @@ onMounted(loadData)
       {{ notice }}
     </p>
 
+    <!-- 하나의 입력 폼을 등록과 수정에 함께 사용하며, editingId로 현재 작업을 구분한다. -->
     <form class="card" @submit.prevent="saveExpense">
       <div class="card-heading">
         <div class="heading-title">
@@ -383,6 +385,7 @@ onMounted(loadData)
         <span class="heading-note">* 필수 입력</span>
       </div>
 
+      <!-- 조회 또는 저장 중에는 입력값이 바뀌거나 중복 제출되지 않도록 입력 영역을 비활성화한다. -->
       <fieldset :disabled="saving || loading">
         <legend class="sr-only">지출 정보 입력</legend>
 
@@ -517,6 +520,7 @@ onMounted(loadData)
         </form>
       </div>
 
+      <!-- 조회 중, 오류 발생, 검색 결과 없음 상태를 순서대로 구분해 안내한다. -->
       <p v-if="loading" class="empty-state" role="status">지출 내역을 불러오는 중입니다.</p>
       <p v-else-if="errorMessage" class="list-warning">목록이 최신 상태가 아닐 수 있습니다.</p>
       <p v-else-if="expenses.length === 0" class="empty-state">조회 조건에 맞는 지출이 없습니다.</p>
@@ -679,6 +683,7 @@ onMounted(loadData)
   min-height: 44px;
 }
 
+/* 좁은 화면에서는 검색 항목을 세로로 배치해 입력창이 잘리지 않도록 한다. */
 @media (max-width: 640px) {
   .expense-search {
     display: grid;

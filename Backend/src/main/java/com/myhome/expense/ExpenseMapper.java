@@ -8,12 +8,17 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.annotations.Delete;
 
+/**
+ * 생활비 조회·등록·수정·삭제에 필요한 SQL을 실행한다.
+ * 사용자별 데이터를 구분하도록 조회와 변경 조건에 사용자 ID를 포함한다.
+ */
 @Mapper
 public interface ExpenseMapper {
 
     /**
-     * 로그인한 사용자의 전체 지출 개수를 조회한다.
-     * 페이지 수가 목록과 일치하도록 findPage와 동일한 조회 조건을 사용한다.
+     * 로그인한 사용자의 생활비 중 검색 조건에 맞는 전체 건수를 조회한다.
+     * 페이지 수가 목록과 일치하도록 findPage와 동일한 검색 조건을 사용한다.
+     * COUNT_BIG 결과를 받을 수 있도록 반환형은 long을 사용한다.
      */
     @Select("""
         <script>
@@ -41,8 +46,10 @@ public interface ExpenseMapper {
     );
 
     /**
-     * 로그인한 사용자의 지출을 페이지 단위로 조회한다.
-     * 지출일 내림차순으로 정렬하고, 같은 날짜라면 ID가 큰 항목을 먼저 표시한다.
+     * 검색 조건에 맞는 생활비를 페이지 단위로 조회한다.
+     * 카테고리 테이블을 연결하여 화면에 표시할 카테고리명도 가져온다.
+     * 지출일이 최신인 항목부터 조회하고, 같은 날짜는 ID 내림차순으로 정렬한다.
+     * offset만큼 건너뛴 뒤 size개까지 가져온다.
      */
     @Select("""
         <script>
@@ -149,8 +156,9 @@ public interface ExpenseMapper {
     int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
 
     /**
-     * 현재 사용자의 생활비가 고정 지출 납부 기록에 연결되어 있는지 확인한다.
-     * */
+     * 생활비가 해당 사용자의 고정 지출 납부 기록에 연결되어 있는지 확인한다.
+     * 연결된 기록이 있으면 true를 반환하여 서비스에서 직접 수정·삭제를 차단한다.
+     */
     @Select("""
     SELECT CAST(
         CASE WHEN EXISTS (

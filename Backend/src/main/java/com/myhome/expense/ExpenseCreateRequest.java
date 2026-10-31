@@ -11,8 +11,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 지출 등록 요청.
- * 필수값과 길이, 금액, 지출 유형을 검증한다.
+ * 생활비 등록 화면에서 전달하는 입력값이다.
+ * 필수값, 문자열 길이, 금액 자릿수와 지출 유형을 검사한다.
+ * 사용자 ID는 로그인 정보에서 가져오므로 요청 항목에 포함하지 않는다.
  */
 public record ExpenseCreateRequest(
         @NotNull

@@ -4,8 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * 지출 목록 조회 응답.
- * 금액은 소수점 계산 오차를 피하기 위해 BigDecimal을 사용한다.
+ * 생활비 목록과 수정 폼에 사용할 조회 결과다.
+ * 카테고리 ID는 수정 시 항목 선택에, 카테고리명은 목록 표시에 사용한다.
+ * 서버에서 금액을 정확하게 다루기 위해 BigDecimal을 사용한다.
  */
 public record ExpenseResponse(
         Long id,                 // 지출 ID

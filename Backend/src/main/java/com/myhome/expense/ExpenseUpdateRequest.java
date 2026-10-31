@@ -4,7 +4,11 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-/** 지출 수정 요청. */
+/**
+ * 생활비 수정 화면에서 전달하는 입력값이다.
+ * 등록과 동일한 입력 기준을 적용한다.
+ * 수정할 생활비 ID는 URL에서 받고, 사용자 ID는 로그인 정보에서 가져온다.
+ */
 public record ExpenseUpdateRequest(
         @NotNull @Positive
         Long categoryId,          // 카테고리 ID

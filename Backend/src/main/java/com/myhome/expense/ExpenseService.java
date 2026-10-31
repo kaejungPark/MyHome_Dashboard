@@ -31,7 +31,8 @@ public class ExpenseService {
     }
 
     /**
-     * 로그인한 사용자의 지출만 조회한다.
+     * 검색 조건과 페이지 정보를 검증한 뒤 생활비 목록을 조회한다.
+     * 동일한 조건으로 전체 건수를 구해 목록과 페이지 정보를 함께 반환한다.
      */
     @Transactional(readOnly = true)
     public PageResponse<ExpenseResponse> getExpenses(
@@ -48,10 +49,10 @@ public class ExpenseService {
         // 검색어 앞뒤 공백을 제거한다. 빈 문자열이면 전체 항목을 조회한다.
         String searchTitle = title == null ? "" : title.trim();
 
-        // 미선택이면 전체 장소를 조회한다.
+        // 지출 유형의 앞뒤 공백을 제거한다. 빈 값이면 고정·변동 지출을 모두 조회한다.
         String searchType = expenseType == null ? "" : expenseType.trim();
 
-        // 예외 처리
+        // 조회 조건에는 전체 조회용 빈 값 또는 FIXED·VARIABLE만 허용한다.
         if (!searchType.isEmpty() && !searchType.matches("FIXED|VARIABLE")) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -59,13 +60,13 @@ public class ExpenseService {
             );
         }
 
-        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        // 현재 페이지를 조회하기 전에 건너뛸 데이터 수를 계산한다.
         long offset = PageUtils.calculateOffset(page, size);
 
-        // 목록과 동일한 조건으로 전체 지출 수를 조회한다.
+        // 검색 조건에 맞는 전체 건수를 조회한다.
         long totalCount = expenseMapper.countAll(userId, searchTitle, categoryId, searchType);
 
-        // 나머지가 있으면 마지막 페이지를 하나 추가한다.
+        // 전체 건수와 페이지 크기로 필요한 페이지 수를 계산한다.
         long totalPages = PageUtils.calculateTotalPages(totalCount, size);
 
         // 조회 결과가 없거나 요청한 페이지가 범위를 넘으면 빈 목록을 반환한다.
@@ -88,6 +89,7 @@ public class ExpenseService {
      */
     @Transactional
     public void createExpense(Long userId, ExpenseCreateRequest request) {
+        // 화면에서 전달한 카테고리 ID가 실제로 존재하는지 확인한다.
         if (categoryMapper.countById(request.categoryId()) == 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
@@ -97,6 +99,7 @@ public class ExpenseService {
 
         int insertedRows = expenseMapper.insert(userId, request);
 
+        // 한 건을 등록하는 요청이므로 저장된 행 수도 정확히 1이어야 한다.
         if (insertedRows != 1) {
             throw new IllegalStateException("등록 중 오류가 발생하였습니다.");
         }
@@ -114,11 +117,7 @@ public class ExpenseService {
             );
         }
 
-        /**
-         * 고정 지출 납부 기록에 연결된 생활비의 직접 수정·삭제를 차단한다.
-         * 연결 여부는 지출 유형이 아니라 실제 납부 기록으로 판단한다.
-         * 연결된 생활비를 제거하려면 고정 지출의 납부 취소 기능을 사용해야 한다.
-         */
+        // 고정 지출 납부 기록에 연결된 생활비인지 확인한다.
         validateEditableExpense(userId, id);
 
         if (categoryMapper.countById(request.categoryId()) == 0) {
@@ -129,6 +128,7 @@ public class ExpenseService {
 
         int updatedRows = expenseMapper.update(id, userId, request);
 
+        // ID와 사용자 ID를 함께 확인하므로 대상이 없거나 본인 소유가 아니면 0건이다.
         if (updatedRows == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "지출 수정중 오류가 발생하였습니다."
@@ -157,6 +157,7 @@ public class ExpenseService {
 
         int deletedRows = expenseMapper.deleteByIdAndUserId(id, userId);
 
+        // 삭제된 행이 없으면 대상이 없거나 본인 소유가 아닌 것으로 처리한다.
         if (deletedRows == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "지출 삭제 중 오류가 발생하였습니다."
@@ -168,7 +169,11 @@ public class ExpenseService {
         }
     }
 
-    /** 납부로 생성된 생활비는 납부 취소 기능으로만 제거할 수 있다. */
+    /**
+     * 고정 지출 납부로 생성된 생활비의 직접 수정·삭제를 차단한다.
+     * FIXED 유형인지가 아니라 실제 납부 기록에 연결되어 있는지로 판단한다.
+     * 연결된 생활비를 제거하려면 고정 지출 화면에서 납부를 취소해야 한다.
+     */
     private void validateEditableExpense(Long userId, Long id) {
         if (expenseMapper.existsRecurringPayment(userId, id)) {
             throw new ResponseStatusException(
