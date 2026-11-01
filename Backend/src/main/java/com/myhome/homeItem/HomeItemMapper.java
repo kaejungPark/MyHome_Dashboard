@@ -4,12 +4,17 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.*;
 import java.util.List;
 
+/**
+ * 물품 조회·등록·수정·삭제에 필요한 SQL을 실행한다.
+ * 사용자 ID를 조회와 변경 조건에 포함하여 다른 사용자의 물품과 구분한다.
+ */
 @Mapper
 public interface HomeItemMapper {
 
     /**
-     * 로그인한 사용자의 물품 중 물품명·물품 분류·상태 조건에 맞는 전체 개수를 조회한다.
-     * 검색어와 필터가 비어 있으면 해당 조건을 적용하지 않는다.
+     * 로그인한 사용자의 물품 중 검색 조건에 맞는 전체 건수를 조회한다.
+     * 물품명과 분류는 입력한 글자가 포함된 항목을 찾고, 상태는 정확히 일치하는 값을 찾는다.
+     * findPage와 동일한 조건을 사용해야 목록과 전체 페이지 수가 일치한다.
      */
     @Select("""
             <script>
@@ -35,7 +40,9 @@ public interface HomeItemMapper {
     );
 
     /**
-     * 현재 사용자의 물품을 등록일과 ID 기준 최신순으로 조회한다.
+     * 검색 조건에 맞는 물품을 등록일 최신순으로 조회한다.
+     * 등록일이 같으면 ID 내림차순으로 정렬하여 조회 순서를 일정하게 유지한다.
+     * offset만큼 건너뛴 뒤 size개까지 가져온다.
      */
     @Select("""
             <script>

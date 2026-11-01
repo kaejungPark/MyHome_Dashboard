@@ -9,6 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 물품 조회·등록·수정·삭제 요청을 받아 서비스에 전달한다.
+ * 사용자 ID는 로그인 정보에서 가져와 사용자별 물품을 구분한다.
+ */
 @RestController
 @RequestMapping("/api/home-item")
 public class HomeItemController {
@@ -17,8 +21,10 @@ public class HomeItemController {
     public HomeItemController(HomeItemService homeItemService) {this.homeItemService = homeItemService;}
 
     /**
-     * GET /api/home-item: 물품 목록 조회
-     * */
+     * 로그인한 사용자의 물품을 검색 조건에 맞춰 페이지 단위로 조회한다.
+     * 물품명·분류·상태가 비어 있으면 해당 검색 조건을 적용하지 않는다.
+     * 조회한 목록과 전체 건수, 페이지 정보를 함께 반환한다.
+     */
     @GetMapping
     public ApiResponse<PageResponse<HomeItemResponse>> getHomeItem (
             @AuthenticationPrincipal LoginUser loginUser,
@@ -39,7 +45,8 @@ public class HomeItemController {
     }
 
     /**
-     * POST /api/home-item: 물품 등록
+     * 로그인한 사용자의 물품을 등록한다.
+     * @Valid로 필수값과 입력 형식을 검사하고, 등록 성공 시 201 상태를 반환한다.
      */
     @PostMapping
     public ResponseEntity<ApiResponse<Void>> createHomeItem(
@@ -51,7 +58,8 @@ public class HomeItemController {
     }
 
     /**
-     * PUT /api/home-item/{id}: 물품 수정
+     * URL로 전달받은 ID의 물품 정보를 수정한다.
+     * 로그인한 사용자의 ID도 함께 전달하여 본인 소유의 물품만 수정하도록 한다.
      */
     @PutMapping("/{id}")
     public ApiResponse<Void> updateHomeItem(
@@ -64,7 +72,8 @@ public class HomeItemController {
     }
 
     /**
-     * DELETE /api/home-item/{id}: 물품 삭제
+     * 로그인한 사용자가 소유한 물품을 삭제한다.
+     * 처분 상태로 변경하는 것과 달리 DB에서 해당 물품을 제거한다.
      */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteHomeItem(

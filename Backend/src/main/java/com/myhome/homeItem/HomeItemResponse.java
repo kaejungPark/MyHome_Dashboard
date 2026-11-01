@@ -4,8 +4,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * Dashboard에서의 물품 조회
- * 구매 정보, 보증 종료일, 관리 주기 등 선택 항목은 null일 수 있다.
+ * 물품 관리 목록과 수정 폼에서 사용하는 조회 결과다.
+ * 구매 정보·보증 종료일·관리 주기 등 선택 항목은 null일 수 있다.
+ * 상태는 코드로 전달하며 화면에서 한글 명칭으로 표시한다.
  */
 public record HomeItemResponse(
         Long id,                   // 물품 ID

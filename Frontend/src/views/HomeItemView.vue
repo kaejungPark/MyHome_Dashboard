@@ -10,10 +10,10 @@ import Pagination from '../components/Pagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
 
-// 물품 상태에 사용
+// 물품 등록·수정에 사용할 수 있는 상태 코드다.
 type HomeItemStatus = 'IN_USE' | 'STORED' | 'DISPOSED'
 
-// 물품 상태 조회
+// 검색에서는 빈 문자열을 추가로 허용하며, 빈 값은 전체 상태를 의미한다.
 type SearchStatus = '' | 'IN_USE' | 'STORED' | 'DISPOSED'
 
 // 물품 목록 조회와 수정 폼에서 사용하는 데이터다.
@@ -45,11 +45,10 @@ const { page, size, totalCount, totalPages, resetPage, resetTotals, applyPage, c
   usePagination(5)
 
 /**
- * 마지막으로 검색 버튼을 눌렀을 때의 조건을 저장
- * 페이지 이동이나 저장·삭제 후 재조회할 때도 이 조건을 사용
- * 검색창을 수정만 하고 조회하지 않은 값이 페이지 이동에 반영되는 것을 방지
+ * 검색 버튼으로 확정한 조건을 보관한다.
+ * 페이지 이동이나 저장·삭제 후 재조회에도 같은 조건을 사용한다.
+ * 검색창에 입력만 한 값은 검색 버튼을 누르기 전까지 적용하지 않는다.
  */
-// 검색 버튼으로 확정한 조건을 페이지 이동과 재조회에도 유지한다.
 const appliedFilters = reactive({
   name: '',
   category: '',
@@ -68,7 +67,9 @@ const form = reactive(initialForm())
 const baseUrl = '/api/home-item'
 
 /**
- * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 만든다.
+ * 선택 항목은 빈칸으로 두고, 물품 상태는 사용 중으로 설정한다.
+ * 구매 금액과 관리 주기는 빈칸을 표현할 수 있도록 문자열로 관리한다.
  */
 function initialForm() {
   return {
@@ -111,16 +112,16 @@ async function searchHomeItems() {
 
   if (editingId.value !== null) resetForm()
 
-  // 제목의 앞뒤 공백을 제거하고, 현재 입력값을 적용된 검색 조건에 복사
+  // 물품명과 분류의 앞뒤 공백을 제거하고, 검색창의 값을 실제 조회 조건에 반영한다.
   Object.assign(appliedFilters, {
     name: searchName.value.trim(),
     category: searchCategory.value.trim(),
     status: searchStatus.value,
   })
 
-  resetPage() // 새로운 검색은 첫 페이지부터 시작하고 이전 처리 완료 안내
-  notice.value = ''
-  await loadData() // 확정한 검색 조건으로 물품 목록을 조회한다.
+  resetPage() // 새로운 검색은 첫 페이지부터 시작한다.
+  notice.value = '' // 이전 등록·수정·삭제 완료 메시지를 지운다.
+  await loadData()
 }
 
 /**
@@ -178,10 +179,10 @@ function startEdit(item: HomeItem) {
 }
 
 /**
- * 필수 입력과 금액을 검증한 뒤 물품을 등록하거나 수정
- * editingId가 없으면 POST로 등록하고, 있으면 해당 ID에 PUT으로 수정
- * 저장 성공 후 입력 폼을 초기화하고 적용된 검색 조건으로 목록을 다시 조회
- * 저장 요청이 실패하면 입력값을 유지
+ * 물품명·상태와 선택 입력값의 형식을 검사한 뒤 등록 또는 수정한다.
+ * 선택 항목의 빈칸은 null로 전달하며, 구매 금액 0원은 그대로 유지한다.
+ * 저장 성공 후 폼을 초기화하고 기존 검색 조건으로 목록을 다시 조회한다.
+ * 저장 요청이 실패하면 입력한 내용을 유지한다.
  */
 async function saveHomeItem() {
   if (saving.value || loading.value) return
@@ -308,6 +309,7 @@ async function loadData() {
   resetTotals()
 
   try {
+    // 이번 조회의 조건과 페이지 크기를 보관하여 페이지 보정 요청에도 동일하게 사용한다.
     const filters = { ...appliedFilters }
     const pageSize = size.value
 
@@ -349,8 +351,11 @@ async function loadData() {
       result = await fetchItemPage(lastPage)
     }
 
+    // 목록은 화면 상태에 저장하고, 페이지 번호와 전체 건수는 공통 페이지 처리 함수에 반영한다.
     homeItems.value = result.data.items
     applyPage(result.data)
+
+    // 이번 조회가 체험 데이터인지 표시하여 저장·삭제 요청을 제한한다.
     isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)
@@ -385,6 +390,7 @@ onMounted(loadData)
       {{ notice }}
     </p>
 
+    <!-- 등록과 수정에 같은 폼을 사용하며, editingId 유무로 제목과 저장 동작을 구분한다. -->
     <form class="card" @submit.prevent="saveHomeItem">
       <div class="card-heading">
         <div class="heading-title">
@@ -552,6 +558,7 @@ onMounted(loadData)
               <td class="title-cell">{{ homeItem.name }}</td>
               <td>{{ homeItem.category || '-' }}</td>
               <td class="date-cell">{{ homeItem.purchaseDate ?? '-' }}</td>
+              <!-- 구매 금액이 없으면 '-'를 표시하고, 0원은 실제 입력값이므로 그대로 표시한다. -->
               <td class="amount-cell">
                 {{
                   homeItem.purchasePrice === null
@@ -596,6 +603,7 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <!-- 공통 페이지 이동 UI를 사용하고, 조회·저장 중에는 이동을 막는다. -->
       <Pagination
         :page="page"
         :total-pages="totalPages"
