@@ -11,6 +11,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 집안일·소모품의 관리 항목과 완료 이력에 대한 요청을 처리한다.
+ * 사용자 ID는 로그인 정보에서 가져와 본인 소유 항목만 처리하도록 서비스에 전달한다.
+ */
 @RestController
 @RequestMapping("/api/household-tasks")
 public class HouseholdTaskController {
@@ -21,7 +25,9 @@ public class HouseholdTaskController {
     }
 
     /**
-     * 로그인한 사용자의 집안일·소모품 관리 항목을 조회한다.
+     * 로그인한 사용자의 관리 항목을 검색 조건에 맞춰 페이지 단위로 조회한다.
+     * active는 null이면 전체, true이면 사용 중, false이면 비활성 항목을 조회한다.
+     * active는 완료 여부가 아니라 해당 항목을 계속 관리할지 나타내는 값이다.
      */
     @GetMapping
     public ApiResponse<PageResponse<HouseholdTaskResponse>> getTasks (

@@ -5,12 +5,18 @@ import org.apache.ibatis.annotations.*;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 관리 항목과 완료 이력을 조회·저장하는 SQL을 실행한다.
+ * 관리 항목은 HOUSEHOLD_TASK, 완료 기록은 HOUSEHOLD_TASK_HISTORY에 저장한다.
+ * 하나의 관리 항목에 여러 완료 이력이 연결될 수 있다.
+ */
 @Mapper
 public interface HouseholdTaskMapper {
 
     /**
-     * 로그인한 사용자의 집안일·소모품 중 항목명 ·유형  사용 상태 조건에 맞는 전체 개수를 조회한다.
-     * 검색어와 필터가 비어 있으면 해당 조건을 적용하지 않는다.
+     * 로그인한 사용자의 항목 중 이름·유형·사용 여부 조건에 맞는 전체 건수를 조회한다.
+     * active가 null이면 사용 여부로 제한하지 않고, false이면 비활성 항목만 조회한다.
+     * 페이지 정보가 목록과 일치하도록 findPage와 동일한 검색 조건을 사용한다.
      */
     @Select("""
             <script>
@@ -36,7 +42,9 @@ public interface HouseholdTaskMapper {
     );
 
     /**
-     * 현재 사용자의 집안일·소모품을 등록일과 ID 기준 최신순으로 조회한다.
+     * 사용 중인 항목을 먼저 표시하고, 다음 예정일이 빠른 순서로 조회한다.
+     * 사용 여부와 예정일이 같으면 ID 내림차순으로 정렬한다.
+     * offset만큼 건너뛴 뒤 size개까지 가져온다.
      */
     @Select("""
             <script>
@@ -152,8 +160,9 @@ public interface HouseholdTaskMapper {
     );
 
     /**
-     * 특정 관리 항목 ID와 사용자 ID가 일치하는 단건 항목을 조회한다.
-     * 존재하지 않으면 null을 반환한다.
+     * 관리 항목 ID와 사용자 ID가 일치하는 항목을 조회하고 갱신 잠금을 유지한다.
+     * 완료 처리나 삭제 전에 사용하여 같은 항목에 대한 처리가 충돌하지 않도록 한다.
+     * 서비스의 트랜잭션 안에서 호출하며, 항목이 없으면 null을 반환한다.
      */
     @Select("""
         SELECT
@@ -245,6 +254,10 @@ public interface HouseholdTaskMapper {
             @Param("userId") Long userId
     );
 
+    /**
+     * 지정한 관리 항목에 연결된 완료 이력의 전체 건수를 조회한다.
+     * 사용자 ID를 직접 받지 않으므로 서비스에서 항목의 소유 여부를 먼저 확인해야 한다.
+     */
     @Select("""
         SELECT COUNT_BIG(*)
         FROM dbo.HOUSEHOLD_TASK_HISTORY
@@ -252,6 +265,11 @@ public interface HouseholdTaskMapper {
     """)
     long countAllHistrory(@Param("id") Long id);
 
+    /**
+     * 지정한 관리 항목의 완료 이력을 페이지 단위로 조회한다.
+     * 완료일이 최신인 기록부터 표시하고, 같은 완료일이면 ID 내림차순으로 정렬한다.
+     * 서비스에서 본인 소유 항목임을 확인한 뒤 호출한다.
+     */
     @Select("""
         SELECT
             ID AS id,

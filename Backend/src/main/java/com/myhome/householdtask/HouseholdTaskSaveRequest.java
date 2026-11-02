@@ -4,6 +4,11 @@ import jakarta.validation.constraints.*;
 
 import java.time.LocalDate;
 
+/**
+ * 관리 항목의 등록과 수정에 함께 사용하는 입력값이다.
+ * 다음 예정일은 과거 날짜도 허용하며, 사용 여부는 완료 여부와 별개다.
+ * 이 요청으로 완료 이력을 생성하지는 않는다.
+ */
 public record HouseholdTaskSaveRequest (
 
         // 청소·교체·보충 등 관리할 항목의 이름이다.
@@ -32,6 +37,7 @@ public record HouseholdTaskSaveRequest (
         @NotNull(message = "사용 여부를 선택해 주세요.")
         Boolean active,
 
+        // 관리 항목 자체에 대한 메모다. 완료할 때 작성하는 이력 메모와 별도로 저장한다.
         @Size(max = 500, message = "메모는 500자까지 입력할 수 있습니다.")
         String memo
 

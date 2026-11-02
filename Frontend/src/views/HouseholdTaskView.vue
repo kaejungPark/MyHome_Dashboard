@@ -11,24 +11,27 @@ import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
 import { today } from '../utils/date'
 
+// CHORE는 집안일, CONSUMABLE은 소모품 교체·보충을 의미한다.
 type TaskType = 'CHORE' | 'CONSUMABLE'
 
+// 관리 목록과 수정·완료 대상 선택에 사용하는 항목 정보다.
 interface HouseholdTask {
-  id: number
-  name: string
-  taskType: TaskType
-  cycleDays: number
-  nextDueDate: string
-  active: boolean
-  memo: string | null
+  id: number // 관리 항목 ID
+  name: string // 항목명
+  taskType: TaskType // 집안일 또는 소모품
+  cycleDays: number // 반복 주기: 일 단위
+  nextDueDate: string // 다음 예정일: YYYY-MM-DD
+  active: boolean // 사용 여부이며 완료 여부와는 다르다.
+  memo: string | null // 관리 항목에 대한 메모
 }
 
+// 선택한 관리 항목의 완료 기록 한 건이다.
 interface HouseholdTaskHistory {
-  id: number
-  taskId: number
-  completedDate: string
-  memo: string | null
-  createdDt: string
+  id: number // 완료 이력 ID
+  taskId: number // 이력이 연결된 관리 항목 ID
+  completedDate: string // 실제 완료일
+  memo: string | null // 이번 완료 작업에 대한 메모
+  createdDt: string // 이력이 저장된 일시
 }
 
 // 비로그인 체험 상태에서만 사용한다.
@@ -38,7 +41,7 @@ const { canModify } = useDemoGuard(isDemo)
 // 폼 입력값을 화면과 동기화한다.
 const form = reactive(initialForm())
 
-const completion = reactive(completionForm())
+const completion = reactive(completionForm()) // 관리 항목 등록·수정 폼과 별도로 완료일·완료 메모를 관리한다.
 const completingTask = ref<HouseholdTask | null>(null) // 완료 처리할 항목
 const historyTask = ref<HouseholdTask | null>(null) // 이력을 조회하는 항목
 const historyLoading = ref(false) // 완료 이력 조회 중 여부
@@ -47,7 +50,7 @@ const HouseholdTaskHistorys = ref<HouseholdTaskHistory[]>([])
 // 관리 목록 검색 조건
 const searchName = ref('')
 const searchTaskType = ref<'' | TaskType>('')
-const searchActive = ref<'' | boolean>('')
+const searchActive = ref<'' | boolean>('') // '': 전체, true: 사용 중, false: 비활성
 const loading = ref(false) // 조회 중 여부
 const saving = ref(false) // 저장·삭제 처리 중 여부
 const editingId = ref<number | null>(null) // null이면 신규 등록
@@ -81,6 +84,11 @@ const appliedFilters = reactive({
   active: '' as '' | boolean,
 })
 
+/**
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 만든다.
+ * 유형은 집안일, 사용 여부는 사용 중으로 시작한다.
+ * 반복 주기의 초기값 0은 저장할 수 없으므로 사용자가 1 이상으로 입력해야 한다.
+ */
 function initialForm() {
   return {
     name: '',
@@ -106,16 +114,16 @@ function resetForm() {
   Object.assign(form, initialForm())
 }
 
+// 서버에서 사용하는 유형 코드를 화면에 표시할 한글 명칭으로 바꾼다.
+function taskTypeLabel(taskType: TaskType): string {
+  return taskType === 'CHORE' ? '집안일' : '소모품'
+}
+
 /**
  * 항목명·반복 주기·다음 예정일·메모를 검증한 뒤 등록 또는 수정한다.
  * 수정 대상 ID가 없으면 POST, 있으면 PUT으로 요청한다.
  * 저장 성공 후 폼과 관리 목록을 갱신하고, 열린 이력 제목에도 변경된 항목명을 반영한다.
  */
-function taskTypeLabel(taskType: TaskType): string {
-  return taskType === 'CHORE' ? '집안일' : '소모품'
-}
-
-// 입력값을 검증한 뒤 신규 등록 또는 수정을 요청한다.
 async function saveTask() {
   if (loading.value || saving.value || historyLoading.value) return
   if (!canModify()) return
@@ -172,6 +180,8 @@ async function saveTask() {
 
     resetForm()
     notice.value = id === null ? '등록했습니다.' : '수정했습니다.'
+    // 완료 후에도 반복 관리 항목은 남는다.
+    // 서버에서 갱신한 다음 예정일을 목록에 다시 표시한다.
     await loadData()
   } catch (error: unknown) {
     showError(error)
@@ -495,6 +505,8 @@ async function loadData() {
         size: String(size.value),
       })
 
+      // 전체 조회이면 파라미터를 생략한다.
+      // false도 비활성 조회를 뜻하는 유효한 값이므로 반드시 서버에 전달한다.
       if (active !== '') {
         params.set('active', String(active))
       }
