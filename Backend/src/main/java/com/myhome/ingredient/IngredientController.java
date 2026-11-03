@@ -9,6 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 식재료 조회·등록·수정·삭제 요청을 받아 서비스에 전달한다.
+ * 사용자 ID는 로그인 정보에서 가져와 본인 소유의 식재료만 처리하도록 한다.
+ */
 @RestController
 @RequestMapping("/api/ingredients")
 public class IngredientController {
@@ -20,8 +24,9 @@ public class IngredientController {
 
 
     /**
-     * 로그인한 사용자의 식재료 목록을 조회한다.
-     * 보관 중·소비 완료·폐기 상태를 모두 포함한다.
+     * 로그인한 사용자의 식재료를 이름·보관 장소·상태 조건으로 검색한다.
+     * 상태를 선택하지 않으면 보관 중·소비 완료·폐기를 모두 조회한다.
+     * 검색 결과 목록과 전체 건수, 페이지 정보를 함께 반환한다.
      */
     @GetMapping
     public ApiResponse<PageResponse<IngredientResponse>> getIngredients (

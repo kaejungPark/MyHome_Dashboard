@@ -11,10 +11,17 @@ import { usePagination } from '../composables/usePagination'
 import { useErrorMessage } from '../composables/useErrorMessage'
 import { today } from '../utils/date'
 
-type IngredientStorageLocation = 'REFRIGERATOR' | 'FREEZER' | 'PANTRY' // 식재료 보관 장소 상태값
-type IngredientStatus = 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태값
-type SearchLocation = '' | 'REFRIGERATOR' | 'FREEZER' | 'PANTRY' // 식재료 보관 장소 조회
-type SearchStatus = '' | 'STORED' | 'CONSUMED' | 'DISPOSED' // 식재료 상태값 조회
+// 등록·수정 시 선택할 수 있는 보관 장소 코드다.
+type IngredientStorageLocation = 'REFRIGERATOR' | 'FREEZER' | 'PANTRY'
+
+// 식재료의 관리 상태이며 소비기한 임박 여부와는 별개다.
+type IngredientStatus = 'STORED' | 'CONSUMED' | 'DISPOSED'
+
+// 검색에서는 빈 문자열을 전체 보관 장소로 사용한다.
+type SearchLocation = '' | 'REFRIGERATOR' | 'FREEZER' | 'PANTRY'
+
+// 검색에서는 빈 문자열을 전체 상태로 사용한다.
+type SearchStatus = '' | 'STORED' | 'CONSUMED' | 'DISPOSED'
 
 // 식재료 목록 조회와 수정 폼에서 사용하는 데이터다.
 interface Ingredient {
@@ -70,7 +77,12 @@ const getToday = (): number => {
   return new Date(`${today()}T00:00:00Z`).getTime()
 }
 
-// 선택 입력은 빈 문자열로 초기화하고, 저장할 때 null로 변환한다.
+/**
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 만든다.
+ * 보관 장소는 냉장, 상태는 보관 중으로 설정한다.
+ * 날짜와 메모는 빈칸으로 두며 저장할 때 null로 변환한다.
+ * 수량의 초기값 0은 저장할 수 없으므로 사용자가 양수로 입력해야 한다.
+ */
 function initialForm() {
   return {
     name: '',
@@ -112,19 +124,31 @@ function statusLabel(status: IngredientStatus): string {
   }
 }
 
-// 소비기한과 한국 기준 오늘을 모두 UTC 자정 값으로 비교해 남은 일수를 계산한다.
+/**
+ * 소비기한까지 남은 일수를 계산한다.
+ * 양수는 남은 일수, 0은 오늘까지, 음수는 기한이 지난 상태다.
+ * 소비기한이 없거나 날짜로 변환할 수 없으면 null을 반환한다.
+ */
 const calculateRemainingDays = (expiryDateString: string | null): number | null => {
   if (!expiryDateString) return null
 
   const expiry = new Date(`${expiryDateString}T00:00:00Z`).getTime()
   if (!Number.isFinite(expiry)) return null
 
+  /**
+   * 한국 기준 오늘 날짜를 날짜 차이 계산용 숫자로 바꾼다.
+   * 소비기한과 같은 UTC 자정 기준을 사용하여 시간 차이 없이 날짜를 비교한다.
+   */
   return Math.round((expiry - getToday()) / (1000 * 60 * 60 * 24))
 }
 
-// 남은 일수에 따라 문구와 스타일 클래스를 결정
+/**
+ * 보관 중인 식재료의 소비기한에 따라 안내 문구와 색상을 결정한다.
+ * 기한 경과·오늘까지·3일 이내 임박·그 이후로 구분한다.
+ * 화면 안내만 계산하며 식재료의 저장된 상태값은 변경하지 않는다.
+ */
 const getExpiryStatus = (status: IngredientStatus, expiryDateString: string | null) => {
-  // 보관 중(STORED)이 아니거나(소비 완료·폐기) 소비기한이 없는 경우
+  // 소비 완료·폐기 항목이거나 소비기한이 없으면 남은 기간 안내를 표시하지 않는다.
   if (status !== 'STORED' || !expiryDateString) {
     return { text: '', className: 'text-gray-400' }
   }
@@ -144,7 +168,10 @@ const getExpiryStatus = (status: IngredientStatus, expiryDateString: string | nu
   }
 }
 
-// 다시 조회할 때는 첫 페이지부터 표시한다.
+/**
+ * 검색창의 입력값을 실제 조회 조건으로 확정하고 첫 페이지를 조회한다.
+ * 수정 중인 내용이 있으면 취소 여부를 확인한 뒤 검색한다.
+ */
 async function searchIngredients() {
   if (loading.value || saving.value) return
 
@@ -161,12 +188,15 @@ async function searchIngredients() {
     status: searchStatus.value,
   })
 
-  resetPage() // 새로운 검색은 첫 페이지부터 시작하고 이전 처리 완료 안내
-  notice.value = ''
+  resetPage() // 새로운 검색은 첫 페이지부터 시작한다.
+  notice.value = '' // 이전 등록·수정·삭제 완료 메시지를 지운다.
   await loadData() // 확정한 검색 조건으로 식재료 목록을 조회한다.
 }
 
-// 선택한 페이지의 식재료 목록을 다시 조회한다.
+/**
+ * 적용된 검색 조건을 유지하면서 선택한 페이지를 조회한다.
+ * 이동 가능한 페이지인지 검사하고, 수정 중이면 입력 취소 여부를 확인한다.
+ */
 async function changePage(targetPage: number) {
   if (loading.value || saving.value) return
   if (!canMoveTo(targetPage)) return
@@ -266,6 +296,7 @@ async function saveIngredient() {
     return
   }
 
+  // 저장 후 폼이 초기화되어도 등록·수정에 맞는 완료 메시지를 표시하도록 ID를 보관한다.
   const id = editingId.value
   saving.value = true
 
@@ -378,13 +409,16 @@ async function loadData() {
 
     let result = await fetchIngredientPage(page.value)
 
+    // 결과가 0건이어도 요청할 페이지 번호는 최소 1로 유지한다.
     const lastPage = Math.max(1, result.data.totalPages)
 
+    // 삭제나 필터 결과 변경으로 현재 페이지가 사라졌다면 마지막 유효 페이지를 다시 조회한다.
     if (page.value > lastPage) {
       page.value = lastPage
       result = await fetchIngredientPage(lastPage)
     }
 
+    // 목록은 화면에 저장하고, 전체 건수와 페이지 정보는 공통 함수에 반영한다.
     Ingredients.value = result.data.items
     applyPage(result.data)
     isDemo.value = result.isDemo
@@ -606,7 +640,7 @@ onMounted(loadData)
 
               <td>{{ storageLocationLabel(item.storageLocation) }}</td>
               <td class="date-cell">{{ item.purchaseDate ?? '미입력' }}</td>
-              <!-- 소비기한 셀 수정 -->
+              <!-- 소비기한 날짜와 남은 기간 안내를 표시하며, 날짜가 없으면 '미입력'으로 표시한다. -->
               <td class="date-cell">
                 <div>{{ item.expirationDate ?? '미입력' }}</div>
                 <!-- 보관 중(STORED)일 때만 소비기한 아래에 남은 기간 표시 -->
@@ -662,6 +696,7 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
+      <!-- 현재 검색 결과의 페이지 정보를 표시하고, 조회·저장 중에는 페이지 이동을 막는다. -->
       <Pagination
         :page="page"
         :total-pages="totalPages"

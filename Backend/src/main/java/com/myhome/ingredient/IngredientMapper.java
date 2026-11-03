@@ -4,12 +4,17 @@ import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 
+/**
+ * 식재료 정보를 조회·저장하는 SQL을 실행한다.
+ * 조회와 변경 조건에 사용자 ID를 포함하여 사용자별 데이터를 구분한다.
+ */
 @Mapper
 public interface IngredientMapper {
 
     /**
-     * 로그인한 사용자의 식재료 중 이름·보관 장소·상태 조건에 맞는 전체 개수를 조회한다.
-     * 검색어와 필터가 비어 있으면 해당 조건을 적용하지 않는다.
+     * 검색 조건에 맞는 본인 식재료의 전체 건수를 조회한다.
+     * 이름은 입력한 글자가 포함된 항목을 찾고, 보관 장소와 상태는 정확히 일치하는 값을 찾는다.
+     * 페이지 수가 목록과 일치하도록 findPage와 동일한 검색 조건을 사용한다.
      */
     @Select("""
         <script>
@@ -34,7 +39,10 @@ public interface IngredientMapper {
             @Param("statusType") String statusType);
 
     /**
-     * 현재 사용자의 식재료를 등록일과 ID 기준 최신순으로 조회한다.
+     * 검색 조건에 맞는 식재료를 등록일 최신순으로 조회한다.
+     * 등록일이 같으면 ID 내림차순으로 정렬하여 조회 순서를 일정하게 유지한다.
+     * offset만큼 건너뛴 뒤 size개까지 가져온다.
+     * 소비기한이 가까운 순서가 아닌 등록 순서로 표시하는 목록이다.
      */
     @Select("""
         <script>
