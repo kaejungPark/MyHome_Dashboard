@@ -16,6 +16,11 @@ import org.springframework.dao.DuplicateKeyException;
 import com.myhome.common.validation.PageValidator;
 import com.myhome.common.util.PageUtils;
 
+/**
+ * 고정 지출 설정 관리와 월별 납부 처리를 담당한다.
+ * 설정 등록만으로 생활비가 생성되지는 않으며, 납부 완료 시 실제 생활비를 생성한다.
+ * 납부 취소 시에는 납부 기록과 연결된 생활비를 함께 삭제한다.
+ */
 @Service
 public class RecurringExpenseService {
 
@@ -28,9 +33,9 @@ public class RecurringExpenseService {
     }
 
     /**
-     * 현재 사용자의 고정 지출 관리 목록을 조회한다.
-     * 수정하거나 다시 활성화할 수 있도록 비활성 항목도 포함한다.
-     * 월별 적용 기간 필터링은 납부 예정 조회에서 별도로 수행한다.
+     * 항목명·카테고리·사용 여부 조건으로 고정 지출 관리 목록을 조회한다.
+     * 사용 여부를 선택하지 않으면 비활성 항목도 포함한다.
+     * 월별 적용 기간과 납부 상태는 월별 납부 조회에서 별도로 확인한다.
      */
     @Transactional(readOnly = true)
     public PageResponse<RecurringExpenseResponse> getRecurringExpense(
@@ -57,7 +62,7 @@ public class RecurringExpenseService {
         String searchTitle = title == null ? "" : title.trim();
 
 
-        // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
+        // 현재 페이지를 조회하기 전에 건너뛸 데이터 수를 계산한다.
         long offset = PageUtils.calculateOffset(page, size);
 
         // 목록과 동일한 조건으로 전체 지출 수를 조회한다.
@@ -96,7 +101,7 @@ public class RecurringExpenseService {
         // 페이지 번호와 페이지 크기를 검증한다.
         PageValidator.validate(page, size);
 
-        // 기존 월 검증 함수를 사용해 조회 월을 검증한다.
+        // 조회 월의 형식을 검사하고, DB에서 월을 비교할 때 사용할 해당 월 1일로 변환한다.
         LocalDate monthStart = MonthValidator.parseMonth(monthText).atDay(1);
         YearMonth targetMonth = YearMonth.from(monthStart);
 
@@ -128,6 +133,8 @@ public class RecurringExpenseService {
                 size
         );
 
+        // 월별 목록에만 페이지 정보를 적용한다.
+        // 월 전체 합계는 바깥 MonthlyResponse에 담아 페이지를 이동해도 전체 기준으로 표시한다.
         PageResponse<MonthlyPaymentItem> pageResponse = new PageResponse<>(
                 items,
                 page,
@@ -144,8 +151,9 @@ public class RecurringExpenseService {
     }
 
     /**
-     * 고정 지출을 저장한다.
-     * 처리 중 예외가 발생하면 이번 저장을 취소한다.
+     * 시작·종료 월을 검증한 뒤 고정 지출 설정을 등록한다.
+     * 월 정보는 해당 월 1일로 통일하여 저장한다.
+     * 실제 생활비와 납부 기록은 이 단계에서 생성하지 않는다.
      */
     @Transactional
     public void createRecurringExpense(Long userId, @Valid RecurringExpenseSaveRequest request) {
@@ -171,8 +179,9 @@ public class RecurringExpenseService {
     }
 
     /**
-     * 고정 지출을 수정한다.
-     * 처리 중 예외가 발생하면 이번 저장을 취소한다.
+     * 본인 소유의 고정 지출 설정과 적용 기간을 수정한다.
+     * 설정을 변경해도 이미 납부 처리하여 생성한 생활비는 변경하지 않는다.
+     * 월별 화면의 예정 금액은 변경된 설정을 기준으로 다시 조회된다.
      */
     @Transactional
     public void updateRecurringExpense(Long userId, Long id, RecurringExpenseSaveRequest request) {
@@ -304,7 +313,8 @@ public class RecurringExpenseService {
         }
 
         try {
-            // 생활비를 등록하고 생성된 생활비 ID를 받는다.
+            // 납부 시점의 고정 지출 설정을 복사하여 실제 생활비를 생성한다.
+            // 실제 납부일은 생활비의 지출일로 사용하며, 생성된 ID를 납부 기록에 연결한다.
             Long expenseId = recurringExpenseMapper.insertPaidExpense(
                     userId,
                     expense,
@@ -346,7 +356,8 @@ public class RecurringExpenseService {
     public void cancelPayment(Long userId, Long id, String month) {
         LocalDate paymentMonth = MonthValidator.parseMonth(month).atDay(1);
 
-        // 외래 키로 생활비를 참조하므로 납부 기록부터 삭제한다.
+        // 납부 기록이 생활비를 참조하므로 납부 기록을 먼저 삭제한다.
+        // 삭제된 기록에서 생활비 ID를 받아 정확히 연결된 생활비만 제거한다.
         Long expenseId = recurringExpenseMapper.deletePayment(
                 userId, id, paymentMonth
         );
@@ -371,7 +382,9 @@ public class RecurringExpenseService {
     }
 
     /**
-     * 대시보드에서 사용할 해당 월의 전체 고정 지출 예정 합계를 조회한다.
+     * 대시보드에 표시할 해당 월 전체의 고정 지출 예정 금액을 조회한다.
+     * 목록이나 페이지 정보 없이 합계만 필요할 때 사용한다.
+     * 실제 생활비 합계나 미납 잔액을 의미하지 않는다.
      */
     @Transactional(readOnly = true)
     public BigDecimal getMonthlyTotalAmount(Long userId, String monthText) {

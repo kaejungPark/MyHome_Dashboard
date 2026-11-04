@@ -6,8 +6,9 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 선택한 월의 고정 지출 목록과 예정 금액 합계다.
- * 목록에는 납부 완료 항목도 포함되며, totalAmount는 미납 잔액이 아니다.
+ * 조회 월, 월 전체 예정 금액과 페이지 단위 납부 목록을 반환한다.
+ * totalAmount는 현재 페이지 합계나 미납 잔액이 아니다.
+ * items는 단순 목록이 아니라 목록과 페이지 정보를 담은 PageResponse다.
  */
 public record  MonthlyResponse(
         String month,                           // 조회 월: YYYY-MM

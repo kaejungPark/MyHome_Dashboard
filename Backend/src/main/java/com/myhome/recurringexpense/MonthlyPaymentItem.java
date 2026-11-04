@@ -3,7 +3,11 @@ package com.myhome.recurringexpense;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-/** 선택한 월에 납부할 고정 지출 한 건의 정보다. */
+/**
+ * 선택한 월의 납부 예정 정보와 실제 납부 상태를 함께 표시하는 항목이다.
+ * paymentDate는 예정일, paidDate는 실제 납부일이다.
+ * id는 고정 지출 설정 ID이며 납부 기록 ID가 아니다.
+ */
 public record MonthlyPaymentItem(
         Long id,                 // 고정 지출 ID
         Long categoryId,         // 카테고리 ID

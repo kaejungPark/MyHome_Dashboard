@@ -5,12 +5,17 @@ import java.time.LocalDate;
 import java.util.List;
 import java.math.BigDecimal;
 
+/**
+ * 고정 지출 설정, 월별 납부 기록과 연결된 생활비를 조회·저장한다.
+ * RECURRING_EXPENSE는 반복 설정, RECURRING_PAYMENT는 월별 납부 기록,
+ * EXPENSE는 실제 생활비를 보관한다.
+ */
 @Mapper
 public interface RecurringExpenseMapper {
 
     /**
-     * 로그인한 사용자의 전체 고정 지출 개수를 조회한다.
-     * 페이지 수가 목록과 일치하도록 findPage와 동일한 조회 조건을 사용한다.
+     * 로그인한 사용자의 고정 지출 중 검색 조건에 맞는 전체 건수를 조회한다.
+     * findPage와 동일한 조건을 사용하여 목록과 전체 페이지 수를 일치시킨다.
      */
     @Select("""
         <script>
@@ -82,8 +87,9 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 조회 월의 납부 대상 개수를 조회한다.
-     * 납부 기록이 있으면 현재 활성 상태와 적용 기간에 관계없이 포함한다.
+     * 조회 월의 납부 목록에 표시할 전체 항목 수를 조회한다.
+     * 사용 중이면서 적용 기간에 해당하는 항목을 포함한다.
+     * 해당 월의 납부 기록이 있으면 현재 비활성 상태이거나 적용 기간이 변경되어도 포함한다.
      */
     @Select("""
         SELECT COUNT_BIG(*)
@@ -113,8 +119,9 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 조회 월의 전체 대상에 설정된 고정 지출 금액을 합산한다.
-     * 납부 완료 항목도 포함하며, 미납 잔액이나 실제 납부 금액 합계는 아니다.
+     * 조회 월의 전체 대상에 현재 설정된 예정 금액을 합산한다.
+     * 납부 완료 항목도 포함하며, 현재 페이지의 합계나 미납 잔액이 아니다.
+     * 실제 납부 당시 금액이 아닌 고정 지출 설정의 금액을 기준으로 계산한다.
      * 대상이 없으면 0을 반환한다.
      */
     @Select("""
@@ -145,9 +152,11 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 조회 월의 납부 대상과 납부 상태를 페이지 단위로 조회한다.
-     * 납부 예정일은 해당 월의 말일을 넘지 않도록 보정한다.
-     * 보정한 납부 예정일과 고정 지출 ID 순으로 정렬한 뒤 페이징한다.
+     * 조회 월의 대상 목록에 납부 기록과 실제 생활비 정보를 연결한다.
+     * 납부 기록 유무로 완료 여부를 판단하고, 생활비에서 실제 납부일을 가져온다.
+     * 설정된 납부일이 해당 월에 없으면 말일로 보정한다.
+     * 예: 납부일이 31일이면 4월에는 30일을 예정일로 사용한다.
+     * 보정된 예정일과 ID 순서로 정렬하여 페이지 단위로 조회한다.
      */
     @Select("""
         SELECT
@@ -329,9 +338,10 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 조회한 고정 지출 정보로 실제 생활비를 생성한다.
+     * 고정 지출 설정을 복사하여 FIXED 유형의 실제 생활비를 생성한다.
      * OUTPUT INSERTED.ID로 생성된 생활비 ID를 반환한다.
-     * 지출일은 납부 대상 월이 아니라 실제 납부일이다.
+     * 지출일은 납부 대상 월이 아니라 요청에서 받은 실제 납부일이다.
+     * 결과값을 받는 변경 SQL이므로 @Select와 affectData=true를 함께 사용한다.
      */
     @Select(value = """
     INSERT INTO dbo.EXPENSE (
@@ -392,8 +402,9 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 현재 사용자의 해당 월 납부 기록을 조회한다.
-     * */
+     * 해당 월에 실제 납부 기록이 있는 항목과 연결된 생활비 정보를 조회한다.
+     * 월별 예정 목록과 달리 미납 항목은 포함하지 않는다.
+     */
     @Select("""
     SELECT
         p.RECURRING_EXPENSE_ID AS recurringExpenseId,
@@ -412,9 +423,10 @@ public interface RecurringExpenseMapper {
     );
 
     /**
-     * 현재 사용자의 해당 월 납부 기록을 삭제한다.
-     * OUTPUT DELETED.EXPENSE_ID로 삭제한 기록의 생활비 ID를 반환한다.
-     * 대상이 없거나 다른 사용자 소유이면 null을 반환한다.
+     * 본인의 해당 월 납부 기록을 삭제하고 연결되어 있던 생활비 ID를 반환한다.
+     * OUTPUT DELETED.EXPENSE_ID로 삭제한 행의 값을 받아 다음 생활비 삭제에 사용한다.
+     * 조건에 맞는 납부 기록이 없으면 null을 반환한다.
+     * 결과값을 받는 변경 SQL이므로 @Select와 affectData=true를 함께 사용한다.
      */
     @Select(value = """
     DELETE FROM dbo.RECURRING_PAYMENT

@@ -62,10 +62,14 @@ const searchTitle = ref('') // 항목명 입력 변수
 const searchCategoryId = ref<number | ''>('') // 빈 문자열이면 전체 카테고리를 조회한다.
 const searchActive = ref<boolean | ''>('') // 빈 문자열: 전체, true: 사용 중, false: 비활성
 const editingId = ref<number | null>(null) // 수정 대상 ID: null이면 신규 등록
-const saving = ref(false) // 조회·등록·수정·삭제·납부 처리 중 중복 실행을 막는다.
-const loading = ref(false) // 관리 목록과 카테고리 조회가 성공하면 true가 된다.
+const saving = ref(false) // 조회·저장·삭제·납부 처리 중 중복 실행을 막는 공통 상태
+const loading = ref(false) // 관리 목록과 카테고리 조회에 성공하면 true, 재조회 시작 시 false
 const notice = ref('') // 처리 완료 메시지
-const paymentDates = reactive<Record<number, string>>({}) // 항목별로 입력한 실제 납부일을 보관한다.
+
+// 고정 지출 ID를 키로 사용하여 각 행에서 입력한 실제 납부일을 따로 보관한다.
+// 월이나 페이지를 다시 조회하면 이전 입력값을 비운다.
+const paymentDates = reactive<Record<number, string>>({})
+
 const { errorMessage, showError } = useErrorMessage() // 화면의 오류 메시지와 공통 오류 처리 함수를 사용한다.
 
 const isDemo = ref(false) // 조회 결과에 체험 데이터가 포함되었는지 관리, 실제 데이터 접근 권한은 서버에서도 검증
@@ -111,7 +115,9 @@ const selectedMonth = ref(currentMonth())
 const form = reactive(initialForm())
 
 /**
- * 신규 등록과 수정 취소에 사용할 기본 입력값을 생성
+ * 신규 등록과 수정 취소에 사용할 기본 입력값을 만든다.
+ * 시작 월은 현재 월, 매월 납부일은 1일, 사용 여부는 사용으로 설정한다.
+ * 종료 월을 비워 두면 종료 기한이 없는 설정으로 저장한다.
  */
 function initialForm() {
   return {
@@ -162,6 +168,7 @@ async function refreshManagement() {
     params.set('categoryId', String(filters.categoryId))
   }
 
+  // 전체 조회이면 생략하고, false도 비활성 조회를 뜻하는 값이므로 서버에 전달한다.
   if (filters.active !== '') {
     params.set('active', String(filters.active))
   }
@@ -266,7 +273,12 @@ async function changePage(targetPage: number) {
   }
 }
 
-// 선택한 월의 납부 목록을 페이지 단위로 조회한다.
+/**
+ * 선택한 월의 납부 목록과 월 전체 예정 금액을 조회한다.
+ * 페이지는 납부 목록에만 적용하며 합계는 월 전체 기준으로 표시한다.
+ * 재조회할 때 이전에 입력한 실제 납부일을 초기화한다.
+ * 현재 페이지가 사라졌으면 마지막 유효 페이지를 다시 조회한다.
+ */
 async function refreshMonthly() {
   const month = selectedMonth.value
   const currentPage = monthlyPage.value
@@ -275,12 +287,7 @@ async function refreshMonthly() {
   // 이전 월의 목록과 합계를 비우고 페이지 건수를 초기화한다.
   monthly.value = null
 
-  /**
-   * 선택한 월의 납부 목록과 월 전체 예정 금액을 조회한다.
-   * 페이지 이동은 납부 항목 목록에만 적용하며 월 전체 합계는 유지한다.
-   * 재조회할 때 이전에 입력한 실제 납부일을 초기화한다.
-   * 현재 페이지가 사라졌으면 마지막 유효 페이지를 다시 조회한다.
-   */
+  // 이전 조회의 전체 건수와 페이지 수를 초기화한다.
   resetMonthlyTotals()
 
   // 이전 월이나 페이지에서 입력한 실제 납부일을 초기화한다.
@@ -318,7 +325,8 @@ async function refreshMonthly() {
 
   isDemo.value = isDemo.value || result.isDemo
 
-  const resultPage = result.data.items // PageResponse
+  // 월별 응답의 items 안에 실제 목록과 페이지 정보가 들어 있다.
+  const resultPage = result.data.items
   const lastPage = Math.max(1, resultPage.totalPages)
 
   if (currentPage > lastPage) {
@@ -346,7 +354,11 @@ async function changePayment(item: MonthlyPaymentItem) {
 
   // 선택창 값이 아니라 현재 표시된 목록의 월을 사용해 다른 월의 납부 처리를 방지한다.
   const month = monthly.value.month
+
+  // 이미 납부한 항목은 취소 요청으로, 미납 항목은 완료 요청으로 처리한다.
   const cancel = item.paid
+
+  // 실제 납부일을 입력하지 않았다면 오늘 날짜를 사용한다.
   const paymentDate = paymentDates[item.id] ?? today()
 
   if (cancel) {
@@ -523,6 +535,7 @@ async function saveExpense() {
     return
   }
 
+  // 폼 초기화 후에도 등록·수정에 맞는 완료 문구를 표시할 수 있도록 ID를 보관한다.
   const id = editingId.value
   saving.value = true
 
@@ -626,6 +639,7 @@ onMounted(loadData)
         <span class="heading-note">* 필수 입력</span>
       </div>
 
+      <!-- 처리 중이거나 관리 목록·카테고리 조회가 완료되지 않았으면 입력을 막는다. -->
       <fieldset :disabled="saving || !loading">
         <legend class="sr-only">고정 지출 관리 입력</legend>
         <div class="form-grid">

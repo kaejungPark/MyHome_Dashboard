@@ -9,6 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * 고정 지출 설정과 월별 납부 조회·완료·취소 요청을 처리한다.
+ * 사용자 ID는 로그인 정보에서 가져와 본인 소유의 데이터를 처리하도록 한다.
+ */
 @RestController
 @RequestMapping("/api/recurring-expenses")
 public class RecurringExpenseController {
@@ -17,8 +21,10 @@ public class RecurringExpenseController {
     public RecurringExpenseController(RecurringExpenseService recurringExpenseService) { this.recurringExpenseService = recurringExpenseService;}
 
     /**
-     * GET /api/recurring-expenses: 현재 사용자의 고정 지출 관리 목록을 조회한다.
-     * */
+     * 로그인한 사용자의 고정 지출 설정을 검색 조건에 맞춰 페이지 단위로 조회한다.
+     * active는 null이면 전체, true이면 사용 중, false이면 비활성 항목을 조회한다.
+     * 사용 여부와 해당 월의 납부 완료 여부는 서로 다른 값이다.
+     */
     @GetMapping
     public ApiResponse<PageResponse<RecurringExpenseResponse>> getRecurringExpense(
             @AuthenticationPrincipal LoginUser loginUser,
@@ -39,9 +45,9 @@ public class RecurringExpenseController {
     }
 
     /**
-     * GET /api/recurring-expenses/monthly/{xxxx-xx}
-     * 선택한 월의 고정 지출 목록, 납부 상태와 예정 금액 합계를 조회한다.
-     * month는 YYYY-MM 형식으로 전달받는다.
+     * 선택한 월의 납부 대상과 납부 상태, 월 전체 예정 금액 합계를 조회한다.
+     * month는 YYYY-MM 형식이며, 목록만 페이지 단위로 나눈다.
+     * 응답의 items 안에 목록과 페이지 정보가 포함된다.
      */
     @GetMapping("/monthly/{month}")
     public ApiResponse<MonthlyResponse> getMonthlyExpenses(
@@ -82,8 +88,9 @@ public class RecurringExpenseController {
     }
 
     /**
-     * DELETE /api/recurring-expenses/{id}: 고정 지출 설정을 삭제한다.
-     * 실제 지출 내역은 삭제하지 않는다.
+     * 로그인한 사용자의 고정 지출 설정을 삭제한다.
+     * 납부 기록이 있는 항목은 서비스에서 삭제를 차단하고 비활성화를 안내한다.
+     * 납부 기록과 연결된 생활비를 제거하려면 납부 취소 기능을 사용해야 한다.
      */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteRecurringExpense(

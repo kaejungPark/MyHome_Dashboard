@@ -48,7 +48,7 @@ public record RecurringExpenseSaveRequest(
                 message = "종료 월은 YYYY-MM 형식이어야 합니다.")
         String endMonth,
 
-        // 사용 여부: true이면 예정 금액 계산에 포함
+        // 반복 설정의 사용 여부다. 비활성화해도 기존 납부 기록은 월별 조회에 남는다.
         @NotNull(message = "사용 여부는 필수입니다.")
         Boolean active,
 
