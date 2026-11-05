@@ -214,8 +214,8 @@ function resetForm() {
 }
 
 /**
- * 선택한 일정을 수정 대상으로 지정하고 기존 값을 입력 폼에 복사
- * 폼에서 사용하는 타입에 맞춰 문자열로 변환
+ * 목록에서 선택한 일정의 ID를 기억하고, 기존 값을 수정 폼에 채운다.
+ * 금액은 입력란에 맞게 문자열로 바꾸고, 금액이나 메모가 없으면 빈칸으로 표시한다.
  */
 function startEdit(schedule: Schedule) {
   editingId.value = schedule.id
@@ -306,7 +306,8 @@ async function loadData() {
         () => {
           const demo = createDemoData(selectedMonth) // 조회에서 사용할 체험 데이터를 생성, 실제 API 대신 체험 데이터를 반환할 때 아래 콜백에서 사용
 
-          // 조회 월과 기간이 겹치는 일정을 추리고 표시 순서를 정한다.
+          // 체험 목록도 서버와 같은 기준으로, 선택한 월과 하루라도 겹치는 일정을 표시한다.
+          // 미완료 일정을 먼저 보여 주고, 완료 여부가 같으면 마감일이 빠른 순, 일정 ID가 작은 순으로 정렬한다.
           const filtered = demo.schedules
             .filter(
               (item) =>
@@ -336,8 +337,11 @@ async function loadData() {
       result = await fetchSchedulePage(lastPage)
     }
 
+    // 현재 페이지의 일정은 표에 표시하고, 전체 건수와 페이지 정보는 페이지 상태에 반영한다.
     schedules.value = result.data.items
     applyPage(result.data)
+
+    // 체험 데이터를 받은 경우 화면에 안내를 표시하고 저장·삭제 요청을 제한한다.
     isDemo.value = result.isDemo
   } catch (error: unknown) {
     showError(error)
@@ -370,6 +374,7 @@ onMounted(loadData)
     </p>
     <p v-if="notice" class="message success-message" role="status">{{ notice }}</p>
 
+    <!-- 일정 등록과 수정에 같은 폼을 사용한다. 수정할 일정을 선택하면 제목과 저장 버튼이 바뀐다. -->
     <form class="card" @submit.prevent="saveSchedule">
       <div class="card-heading">
         <div class="heading-title">
@@ -419,6 +424,7 @@ onMounted(loadData)
 
           <label>
             완료 여부
+            <!-- 미완료는 false, 완료는 true로 폼에 담고 저장 버튼을 누를 때 서버에 보낸다. -->
             <select v-model="form.completed">
               <option :value="false">미완료</option>
               <option :value="true">완료</option>
@@ -456,7 +462,7 @@ onMounted(loadData)
           <span v-if="!loading" class="count-badge"> {{ totalCount }}건</span>
         </div>
 
-        <!-- 조회 월을 선택하고 해당 월의 일정을 검색한다. -->
+        <!-- 조회 버튼을 누르면 선택한 월을 검색 조건으로 확정하고, 그달과 기간이 겹치는 일정을 첫 페이지부터 보여 준다. -->
         <form class="month-search" @submit.prevent="searchSchedules">
           <label class="month-field">
             조회 월
@@ -546,7 +552,7 @@ onMounted(loadData)
           </tbody>
         </table>
       </div>
-      <!-- 목록 카드 내부에서 페이지 이동 버튼을 표시한다. -->
+      <!-- 페이지를 이동할 때는 마지막으로 조회한 월을 유지한다. 조회·저장 중에는 이동 버튼을 잠근다. -->
       <Pagination
         :page="page"
         :total-pages="totalPages"

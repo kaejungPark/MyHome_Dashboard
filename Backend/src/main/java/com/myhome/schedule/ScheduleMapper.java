@@ -8,7 +8,9 @@ import java.util.List;
 public interface ScheduleMapper {
 
     /**
-     * 로그인한 사용자의 일정 중 조회 월과 기간이 겹치는 전체 개수를 조회한다.
+     * 로그인한 사용자의 일정 중 조회 월과 하루라도 겹치는 일정 수를 센다.
+     * 예를 들어 10월 30일부터 11월 2일까지인 일정은 10월과 11월 조회에 모두 포함된다.
+     * findPage도 같은 기간 조건을 사용하므로 전체 건수와 목록의 기준이 일치한다.
      */
     @Select("""
             SELECT COUNT_BIG(*)
@@ -102,7 +104,7 @@ public interface ScheduleMapper {
 
     int update(@Param("id")Long id, @Param("userId") Long userId, @Param("request") ScheduleSaveRequest request);
 
-    // 해당 사용자의 지출만 삭제하고, 삭제된 행 수를 반환한다.
+    // 일정 ID와 로그인한 사용자 ID가 모두 일치하는 일정을 삭제하고, 삭제된 행 수를 반환한다.
     @Delete("""
         DELETE FROM dbo.SCHEDULE
         WHERE ID = #{id}

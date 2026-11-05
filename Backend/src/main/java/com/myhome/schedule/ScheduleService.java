@@ -23,7 +23,8 @@ public class ScheduleService {
     }
 
     /**
-     * 로그인한 사용자의 일정만 조회한다.
+     * 로그인한 사용자의 일정 중 조회 월과 기간이 겹치는 일정을 조회한다.
+     * 같은 조건으로 전체 건수를 구한 뒤, 요청한 페이지의 일정과 페이지 정보를 함께 반환한다.
      */
     @Transactional(readOnly = true)
     public PageResponse<ScheduleResponse> getSchedul(
@@ -35,6 +36,7 @@ public class ScheduleService {
         // 페이지 번호와 페이지 크기를 검증한다.
         PageValidator.validate(page, size);
 
+        // 화면에서 받은 '2026-11'을 11월 1일로 바꾼다. Mapper는 이 날짜로 조회 월의 첫날과 마지막 날을 정한다.
         LocalDate monthValid = MonthValidator.parseMonth(month).atDay(1);
 
         // 곱하기 전에 long으로 변환하여 정수 범위 초과를 방지한다.
@@ -62,8 +64,8 @@ public class ScheduleService {
     }
 
     /**
-     * 일정을 저장한다.
-     * 처리 중 예외가 발생하면 이번 저장을 취소한다.
+     * 시작일과 마감일을 확인한 뒤 로그인한 사용자의 일정으로 등록한다.
+     * 시작일과 마감일이 같은 하루짜리 일정도 등록할 수 있다.
      */
     @Transactional
     public void createSchedule(Long userId, ScheduleSaveRequest request) {
@@ -81,8 +83,8 @@ public class ScheduleService {
     }
 
     /**
-     * 일정을 수정한다.
-     * 처리 중 예외가 발생하면 이번 저장을 취소한다.
+     * 일정 ID와 날짜 범위를 확인한 뒤 로그인한 사용자의 일정을 수정한다.
+     * 제목, 기간, 완료 여부 등은 화면에서 전달한 값으로 갱신한다.
      */
     @Transactional
     public void updateSchedule(Long userId, Long id, ScheduleSaveRequest request) {
@@ -98,12 +100,14 @@ public class ScheduleService {
 
         int updateRow =  scheduleMapper.update(id, userId, request);
 
+        // 일정 ID와 사용자 ID가 모두 일치하는 행이 없으면 수정 대상을 찾을 수 없으므로 404를 반환한다.
         if (updateRow == 0) {
             throw new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "일정 수정중 오류가 발생하였습니다."
             );
         }
 
+        // 일정 하나를 수정하는 요청이므로 정확히 1행이 수정됐는지 확인한다.
         if (updateRow != 1) {
             throw new IllegalStateException("일정 수정중 오류가 발생하였습니다.");
         }
