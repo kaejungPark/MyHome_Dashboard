@@ -17,9 +17,9 @@ import type { CommentResponse } from '../types/comment'
  * 로그인 정보 조회에 실패한 경우에는 쓰기 기능을 허용하지 않는다.
  */
 const props = defineProps<{
-  communityId: number
-  loginUserId: number | null
-  authError: string
+  communityId: number // 현재 상세 화면에서 보고 있는 게시글 ID
+  loginUserId: number | null // 로그인한 사용자 ID이며, 로그인 정보가 없으면 null
+  authError: string // 부모 화면에서 로그인 정보를 조회하다 발생한 오류 메시지
 }>()
 
 /** 세션 만료 시 부모 화면도 로그인 사용자 정보를 초기화하도록 알린다. */
@@ -32,16 +32,16 @@ const emit = defineEmits<{
  * 부모마다 페이지·목록·입력값을 따로 관리한다.
  */
 interface ReplyState {
-  open: boolean
-  loading: boolean
-  loaded: boolean
-  page: number
-  size: number
-  totalCount: number
-  totalPages: number
-  items: CommentResponse[]
-  content: string
-  error: string
+  open: boolean // 해당 부모 댓글의 답글 영역을 펼쳤는지 여부
+  loading: boolean // 현재 대댓글을 조회 중인지 여부
+  loaded: boolean // 대댓글 조회에 한 번이라도 성공했는지 여부
+  page: number // 해당 부모 댓글의 대댓글 페이지 번호
+  size: number // 대댓글 한 페이지에 표시할 개수
+  totalCount: number // 해당 부모 댓글에 속한 대댓글 전체 건수
+  totalPages: number // 해당 대댓글 목록의 전체 페이지 수
+  items: CommentResponse[] // 현재 페이지에 표시할 대댓글 목록
+  content: string // 해당 부모 댓글 아래에 작성 중인 새 답글
+  error: string // 해당 대댓글 목록의 조회 오류
 }
 
 /** 일반 댓글과 해당 댓글의 대댓글 상태를 함께 관리한다. */
@@ -50,10 +50,10 @@ interface CommentRow {
   replies: ReplyState
 }
 
-const rows = ref<CommentRow[]>([])
-const loading = ref(false)
-const saving = ref(false)
-const sessionExpired = ref(false)
+const rows = ref<CommentRow[]>([]) // 일반 댓글과 각 댓글의 대댓글 상태를 함께 보관
+const loading = ref(false) // 일반 댓글 목록 조회 중 여부
+const saving = ref(false) // 댓글·대댓글 등록, 수정, 삭제 중 여부
+const sessionExpired = ref(false) // 401 응답을 받은 뒤 쓰기 기능을 제한할 때 사용
 
 /** 목록 조회 오류와 변경 요청 오류를 분리해 표시한다. */
 const listError = ref('')
@@ -70,6 +70,8 @@ const content = ref('')
 const editingId = ref<number | null>(null)
 const editingContent = ref('')
 
+// 일반 댓글 목록은 한 페이지에 5개씩 표시한다.
+// 대댓글은 각 부모 댓글의 ReplyState에서 페이지 정보를 따로 관리한다.
 const { page, size, totalCount, totalPages, applyPage, canMoveTo } = usePagination(5)
 
 /** 버튼 표시용 판단이며 최종 권한은 서버에서 검사한다. */
@@ -162,6 +164,8 @@ async function loadComments(targetPage = page.value) {
       result = await fetchComments(props.communityId, lastPage, size.value)
     }
 
+    // 서버에서 받은 일반 댓글마다 새 대댓글 상태를 연결한다.
+    // 각 댓글이 별도 상태를 가지므로 답글 입력값과 페이지 번호가 서로 섞이지 않는다.
     rows.value = result.items.map((comment) => ({
       comment,
       replies: createReplyState(),
@@ -216,7 +220,11 @@ async function loadReplies(row: CommentRow, targetPage = row.replies.page) {
   }
 }
 
-/** 대댓글 영역을 펼칠 때 최초 한 번 조회한다. */
+/**
+ * 답글 영역을 펼치고 닫는다.
+ * 조회에 성공한 목록은 다시 펼칠 때 재사용하고, 아직 조회하지 못했다면 서버에 요청한다.
+ * 일반 댓글 목록을 다시 불러오면 이 조회 상태도 초기화된다.
+ */
 async function toggleReplies(row: CommentRow) {
   if (busy.value || row.replies.loading) return
 
@@ -386,7 +394,11 @@ async function removeComment(comment: CommentResponse, row: CommentRow) {
   }
 }
 
-/** DB의 UTC 일시를 한국 시간으로 표시한다. */
+/**
+ * 서버에서 받은 댓글 작성 일시를 한국 시간으로 표시한다.
+ * 시간대 표시가 빠진 값은 서버의 UTC 저장 기준에 맞춰 Z를 붙여 해석한다.
+ * 날짜로 해석할 수 없는 값은 대시로 표시한다.
+ */
 function formatDateTime(value: string): string {
   const utcValue = /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? value : `${value}Z`
 
@@ -639,7 +651,7 @@ onMounted(() => loadComments(1))
                   </div>
                 </li>
               </ul>
-
+              <!-- 선택한 부모 댓글의 답글 페이지를 이동하고, 해당 답글 목록을 다시 조회한다. -->
               <Pagination
                 :page="row.replies.page"
                 :total-pages="row.replies.totalPages"
@@ -678,7 +690,7 @@ onMounted(() => loadComments(1))
           </section>
         </li>
       </ul>
-
+      <!-- 일반 댓글 페이지를 이동하면 새 목록을 불러오고 대댓글 펼침·입력 상태를 초기화한다. -->
       <Pagination :page="page" :total-pages="totalPages" :disabled="busy" @change="changePage" />
     </template>
   </section>
@@ -772,7 +784,7 @@ onMounted(() => loadComments(1))
   font-size: 14px;
 }
 
-/* HTML로 렌더링하지 않고 입력한 줄바꿈과 긴 문자열을 안전하게 표시한다. */
+/* 댓글에 입력한 줄바꿈을 유지하고, 긴 문자열도 영역 안에서 줄바꿈한다. */
 .comment-content {
   margin: 12px 0;
   color: #334155;

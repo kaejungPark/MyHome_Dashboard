@@ -3,8 +3,10 @@ import type { PageResponse } from '../types/page'
 import type { CommentResponse, CommentCreateRequest, CommentUpdateRequest } from '../types/comment'
 
 /**
- * 게시글에 속한 댓글 API의 공통 주소를 만든다.
- * 모든 댓글 요청은 소속 게시글 ID를 함께 전달한다.
+ * 댓글 화면에서 호출하는 조회·등록·수정·삭제 API를 모아 둔다.
+ * 게시글 ID와 입력값은 컴포넌트에서 전달받는다.
+ * 서버 통신과 CSRF 처리는 client.ts의 request를 사용하고,
+ * 입력창 초기화와 처리 결과 표시는 호출한 컴포넌트에서 담당한다.
  */
 function getCommentUrl(communityId: number): string {
   return `/api/community/${communityId}/comments`
@@ -21,6 +23,7 @@ export async function fetchComments(
   page: number,
   size: number,
 ): Promise<PageResponse<CommentResponse>> {
+  // 페이지 번호와 페이지 크기를 URL의 조회 조건으로 전달할 문자열로 만든다.
   const params = new URLSearchParams({
     page: String(page),
     size: String(size),
@@ -50,6 +53,7 @@ export async function fetchReplies(
   page: number,
   size: number,
 ): Promise<PageResponse<CommentResponse>> {
+  // 페이지 번호와 페이지 크기를 URL의 조회 조건으로 전달할 문자열로 만든다.
   const params = new URLSearchParams({
     page: String(page),
     size: String(size),
@@ -106,7 +110,7 @@ export async function updateComment(
 
 /**
  * 본인이 작성한 댓글·대댓글을 논리 삭제한다.
- *
+ * 서버에서 삭제 상태로 표시하며, 화면은 목록을 다시 조회해 삭제 안내를 반영한다.
  * 부모 댓글을 삭제해도 기존 대댓글은 유지된다.
  * 삭제 확인 창은 이 함수를 호출하기 전에 컴포넌트에서 표시한다.
  */

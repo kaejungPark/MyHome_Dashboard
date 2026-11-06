@@ -1,8 +1,12 @@
-/* 등록·수정·목록 화면에서 사용하는 공통 스타일 */
+/*
+ * main.ts에서 불러오는 등록·수정·목록 화면의 공통 스타일이다.
+ * crud-page 클래스가 붙은 화면에서 카드, 입력창, 버튼, 표의 모양을 통일한다.
+ * 특정 화면에만 필요한 배치는 해당 Vue 파일의 스타일에서 정의한다.
+ */
 .crud-page {
   color: #1e293b;
 }
-
+/* 지정한 너비에 안쪽 여백과 테두리를 포함해 입력창이나 카드가 예상보다 넓어지는 것을 방지한다. */
 .crud-page,
 .crud-page * {
   box-sizing: border-box;
@@ -88,6 +92,7 @@
   border: 0;
 }
 
+/* 입력 항목을 같은 너비의 두 열로 배치하고, 좁은 화면에서는 아래 미디어 쿼리로 한 열로 바꾼다. */
 .crud-page .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -157,6 +162,7 @@
   cursor: not-allowed;
 }
 
+/* 긴 내용을 입력하는 메모는 폼의 전체 열을 차지한다. */
 .crud-page .memo-field {
   grid-column: 1 / -1;
 }
@@ -288,7 +294,7 @@
   white-space: nowrap;
 }
 
-/* 목록 표 */
+/* 표가 화면보다 넓어지면 이 영역 안에서 가로로 스크롤할 수 있게 한다. */
 .crud-page .table-wrap {
   overflow-x: auto;
 }
@@ -323,10 +329,12 @@
   background-color: #fafcff;
 }
 
+/* 수정 폼에 불러온 항목을 목록에서도 찾을 수 있도록 배경색으로 표시한다. */
 .crud-page .data-table tbody tr.editing-row {
   background-color: #eff6ff;
 }
 
+/* 금액은 오른쪽에 정렬하고 숫자 폭을 일정하게 맞춰 행별 금액을 비교하기 쉽게 한다. */
 .crud-page .data-table .amount-cell {
   text-align: right;
   white-space: nowrap;
@@ -370,7 +378,7 @@
   border: 0;
 }
 
-/* 작은 화면 */
+/* 화면 너비가 640px 이하이면 제목과 카드 여백을 줄이고 입력 폼을 한 열로 배치한다. */
 @media (max-width: 640px) {
   .crud-page .page-heading h1 {
     font-size: 24px;

@@ -1,11 +1,16 @@
 import type { ApiResponse } from '../types/api'
 
+/**
+ * 서버에서 받은 CSRF 헤더 이름과 토큰이다.
+ * 등록·수정·삭제 요청을 보낼 때 이 값을 요청 헤더에 넣는다.
+ */
 interface CsrfResponse {
   headerName: string
   token: string
 }
 
-// 화면에서 HTTP 상태 코드로 오류를 구분한다.
+// HTTP 상태 코드를 함께 전달하는 오류 타입이다.
+// 현재 공통 요청에서는 401 응답을 구분할 때 사용한다.
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -22,6 +27,8 @@ export class ApiError extends Error {
  * 기존 요청 헤더와 본문은 유지하며, 실패 시 Error를 발생시킨다.
  * 오류 메시지는 호출한 화면에서 표시한다.
  * 직접 fetch를 사용하는 요청에는 이 처리가 적용되지 않는다.
+ * T는 호출한 화면에서 지정한 응답 데이터의 타입이다.
+ * 정상 처리되면 응답의 data를 반환하며, 응답 본문이 없는 204 응답은 null을 반환한다.
  */
 export async function request<T>(url: string, options?: RequestInit): Promise<T | null> {
   const method = (options?.method ?? 'GET').toUpperCase()
@@ -57,6 +64,8 @@ export async function request<T>(url: string, options?: RequestInit): Promise<T 
     }
   }
 
+  // 로그인되지 않았거나 세션이 만료된 경우에는 상태 코드가 담긴 ApiError를 발생시킨다.
+  // 호출한 화면은 로그인 안내를 표시하고, requestWithDemo는 이 오류를 체험 데이터 전환에 사용한다.
   if (response.status === 401) {
     throw new ApiError(401, result?.message ?? '로그인 후 이용할 수 있습니다.')
   }
@@ -106,6 +115,7 @@ export async function requestWithDemo<T>(
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       return {
+        // 체험 데이터가 필요한 시점에 호출한 화면의 생성 함수를 실행한다.
         data: createSample(),
         isDemo: true,
       }
