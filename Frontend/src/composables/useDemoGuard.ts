@@ -12,6 +12,8 @@ export function useDemoGuard(isDemo: Ref<boolean>) {
   function canModify(): boolean {
     if (!isDemo.value) return true
 
+    // 확인을 누르면 로그인 화면으로 이동한다.
+    // 체험 상태에서 시작한 저장·삭제 요청은 확인과 취소 모두 여기서 중단한다.
     const moveToLogin = window.confirm(
       '내 정보를 저장하고 관리하려면 로그인이 필요합니다. 로그인 화면으로 이동할까요?',
     )

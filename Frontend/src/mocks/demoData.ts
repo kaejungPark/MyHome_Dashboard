@@ -12,9 +12,10 @@ function addDays(dateText: string, days: number): string {
 }
 
 /**
- * 호출할 때마다 독립적인 체험 데이터를 만든다.
- * 월별 화면은 조회 월을 전달하고, 기본값은 한국 시간의 이번 달이다.
- * 각 월에 동일한 예시를 보여주는 체험용 구성이다.
+ * 비로그인 체험 화면에서 사용할 샘플 데이터를 호출할 때마다 새로 만든다.
+ * 월별 예산과 고정 지출 납부 예정일에는 선택한 조회 월을 사용한다.
+ * 조회 월을 생략하면 한국 시간 기준 이번 달을 사용한다.
+ * 일정의 마감일과 식재료의 소비기한처럼 오늘과 비교할 날짜는 한국의 오늘 날짜를 기준으로 만든다.
  */
 export function createDemoData(selectedMonth?: string) {
   const today = koreaToday()
@@ -113,6 +114,8 @@ export function createDemoData(selectedMonth?: string) {
     },
   ]
 
+  // 예시 항목을 순서대로 반복해 23건을 만들고, 각 지출일은 오늘부터 하루씩 거슬러 올라가도록 지정한다.
+  // 생활비 화면에서 한 페이지에 5건씩 조회하면 마지막 5페이지에는 3건이 표시된다.
   const expenseList = Array.from({ length: 23 }, (_, index) => {
     const sample = expenseExamples[index % expenseExamples.length]!
 
@@ -480,18 +483,22 @@ export function createDemoData(selectedMonth?: string) {
     },
   ]
 
-  // 대시보드 목록과 전체 건수에 동일한 조회 조건을 적용한다.
+  // dashboardSchedules 바로 위
+  // 미완료 일정 중 마감일이 오늘부터 7일 뒤까지인 항목을 고른다. 이미 마감일이 지난 일정도 포함한다.
   const dashboardSchedules = schedules
     .filter((item) => !item.completed && item.dueDate <= paymentEndDate)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.id - b.id)
 
+  // dashboardPayments 바로 위
+  // 납부 예정일이 오늘부터 7일 뒤 사이인 항목을 고른다. 오늘보다 이전인 예정일은 제외한다.
   const dashboardPayments = payments
     .filter((item) => item.paymentDate >= today && item.paymentDate <= paymentEndDate)
     .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.id - b.id)
 
   const ingredientEndDate = addDays(today, 3)
 
-  // 소비기한이 있는 보관 중 식재료만 대상으로 한다.
+  // 보관 중이고 소비기한이 오늘부터 3일 뒤까지인 식재료를 고른다. 이미 소비기한이 지난 항목도 포함한다.
+  // 대시보드에 필요한 ID, 식재료명, 보관 장소, 소비기한만 담아 소비기한이 빠른 순으로 정렬한다.
   const dashboardIngredients = ingredients
     .flatMap((item) => {
       if (
@@ -513,6 +520,8 @@ export function createDemoData(selectedMonth?: string) {
     })
     .sort((a, b) => a.expirationDate.localeCompare(b.expirationDate) || a.id - b.id)
 
+  // 사용 중인 집안일·소모품 중 다음 예정일이 오늘부터 7일 뒤까지인 항목을 고른다.
+  // 예정일이 지난 항목도 사용자가 확인할 수 있도록 목록에 포함한다.
   const dashboardHouseholdTasks = householdTasks
     .filter((item) => item.active && item.nextDueDate <= paymentEndDate)
     .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate) || a.id - b.id)

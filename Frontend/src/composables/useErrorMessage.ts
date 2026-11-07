@@ -7,7 +7,11 @@ import { ref } from 'vue'
 export function useErrorMessage(fallbackMessage = '요청 처리 중 오류가 발생했습니다.') {
   const errorMessage = ref('')
 
-  // 오류를 개발자 도구에 기록하고 화면에 표시할 문구로 변환한다.
+  /**
+   * 화면의 catch에서 받은 오류를 개발자 도구에 기록한다.
+   * Error에 메시지가 있으면 그 문구를 errorMessage에 담고,
+   * 메시지가 비어 있거나 다른 종류의 값이면 기본 안내 문구를 담는다.
+   */
   function showError(error: unknown) {
     console.error(error)
 

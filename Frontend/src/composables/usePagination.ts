@@ -9,8 +9,11 @@ import type { PageResponse } from '../types/page'
  * /
 
 /**
- * 목록마다 독립적인 페이지 상태를 생성하고 관리하는 컴포저블
- * @param initialSize 초기 페이지 크기 (기본값: 5)
+ * 목록 하나의 현재 페이지, 페이지 크기, 전체 건수와 전체 페이지 수를 관리한다.
+ * 호출할 때마다 별도 상태를 만들므로 한 화면에 목록이 두 개라면 목록별로 호출한다.
+ * 예를 들어 고정 지출 화면에서는 관리 목록의 페이지를 넘겨도 월별 납부 목록의 페이지는 유지된다.
+ *
+ * @param initialSize 한 페이지에 표시할 항목 수. 기본값은 5이며 1~50의 정수를 허용한다.
  */
 export function usePagination(initialSize = 5) {
   // 기본 페이지 사이즈 유효성 검증 (정수 및 1~50 범위 체크)
@@ -39,9 +42,8 @@ export function usePagination(initialSize = 5) {
   }
 
   /**
-   * 서버 또는 API 응답의 페이징 정보를 현재 반응형 상태에 동기화합니다.
-   * @param result 페이징 응답 데이터 조각 (page, size, totalCount, totalPages)
-   * Pick PageResponse에서 페이지 정보 네 개만 사용하기 위해 사용
+   * 조회 결과에서 페이지 번호, 페이지 크기, 전체 건수, 전체 페이지 수를 가져온다.
+   * 화면은 result.items를 목록에 표시하고, 나머지 페이지 정보는 이 함수로 반영한다.
    */
   function applyPage(
     result: Pick<PageResponse<unknown>, 'page' | 'size' | 'totalCount' | 'totalPages'>,
