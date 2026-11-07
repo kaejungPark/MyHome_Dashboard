@@ -5,6 +5,11 @@ import org.apache.ibatis.annotations.*;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 로그인한 사용자의 항목 중 입력한 검색 조건을 만족하는 전체 건수를 조회한다.
+ * 물품명은 입력한 글자가 포함된 항목을 찾고, 구매 예정일은 입력한 날짜와 정확히 비교한다.
+ * findPage와 같은 조건을 사용해야 화면의 전체 건수와 목록이 일치한다.
+ */
 @Mapper
 public interface ShoppingMapper {
 
@@ -32,7 +37,10 @@ public interface ShoppingMapper {
             @Param("searchDate") LocalDate searchDate
     );
 
-    // countAll과 동일한 조건으로 현재 페이지의 장보기 항목을 조회한다.
+    /**
+     * 검색 결과를 최근 등록한 순서로 정렬한 뒤 현재 페이지에 해당하는 항목만 조회한다.
+     * 등록 시각이 같으면 ID가 큰 항목을 먼저 표시해 페이지를 이동해도 정렬 순서가 일정하도록 한다.
+     */
     @Select("""
         <script>
         SELECT

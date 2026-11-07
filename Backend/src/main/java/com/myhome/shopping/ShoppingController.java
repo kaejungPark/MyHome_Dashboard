@@ -25,8 +25,10 @@ public class ShoppingController {
     }
 
     /**
-     * 물품명·구매 여부·날짜 조건으로 로그인한 사용자의 장보기 목록을 조회한다.
-     * 조회 결과는 전체 건수와 페이지 정보를 포함하여 반환한다.
+     * 로그인한 사용자의 장보기 목록을 물품명, 구매 여부, 구매 예정일로 검색한다.
+     * 구매 여부는 true이면 구매 완료, false이면 미구매, 생략하면 전체를 조회한다.
+     * 날짜를 입력하면 구매 예정일이 그 날짜인 항목을 조회한다.
+     * 현재 페이지의 목록과 검색 조건에 맞는 전체 건수, 페이지 정보를 함께 반환한다.
      */
     @GetMapping
     public ApiResponse<PageResponse<ShoppingResponse>> getShoppings (
@@ -75,7 +77,9 @@ public class ShoppingController {
     }
 
     /**
-     * 로그인한 사용자 소유의 장보기 항목을 삭제한다.
+     * 일정한 장보기 항목 하나를 목록에서 삭제한다.
+     * URL의 항목 ID와 로그인한 사용자 ID가 모두 일치해야 삭제할 수 있다.
+     * 구매 완료 항목을 미구매로 되돌릴 때는 구매 취소 API를 사용한다.
      */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> deleteShopping (

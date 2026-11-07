@@ -23,7 +23,7 @@ interface ShoppingItem {
 
 const shoppingItems = ref<ShoppingItem[]>([]) // 현재 페이지의 장보기 목록
 const searchName = ref('')
-const searchCompleted = ref<'' | boolean>('')
+const searchCompleted = ref<'' | boolean>('') // 구매 여부 검색값: ''이면 전체, false이면 미구매, true이면 구매 완료를 조회한다.
 const searchPurchaseDueDate = ref('')
 
 const loading = ref(false) // 조회 중 여부
@@ -70,7 +70,8 @@ function initialForm() {
 }
 
 /**
- * 선택한 식재료를 수정 대상으로 지정하고 기존 값을 입력 폼에 복사
+ * 목록에서 선택한 장보기 항목을 수정 대상으로 지정하고 기존 값을 입력 폼에 복사한다.
+ * 구매 여부와 실제 구매일은 목록의 구매 완료·취소 버튼으로 변경한다.
  */
 function startEdit(item: ShoppingItem) {
   editingId.value = item.id
@@ -109,8 +110,8 @@ async function searchShopping() {
     purchaseDueDate: searchPurchaseDueDate.value,
   })
 
-  resetPage() // 새로운 검색은 첫 페이지부터 시작하고 이전 처리 완료 안내
-  notice.value = ''
+  resetPage() // 검색 조건이 바뀌면 새 결과의 첫 페이지부터 조회한다.
+  notice.value = '' // 이전 등록·수정·삭제의 성공 메시지를 지운다.
   await loadData() // 확정한 검색 조건으로 장보기 목록을 조회한다.
 }
 
@@ -129,7 +130,7 @@ async function changePage(targetPage: number) {
 
   notice.value = ''
   page.value = targetPage // 목표 페이지를 설정한 뒤 기존 검색 조건으로 목록을 다시 조회
-  await loadData()
+  await loadData() // 미구매만 조회 중이면 방금 완료한 항목이 목록에서 빠지므로 건수와 페이지도 다시 조회한다.
 }
 
 /**
@@ -266,6 +267,7 @@ async function cancelCompletion(item: ShoppingItem) {
     if (editingId.value === item.id) resetForm()
 
     notice.value = '구매 완료가 취소됐습니다.'
+    // 구매 완료만 조회 중이면 취소한 항목이 목록에서 빠지므로 현재 검색 조건으로 다시 조회한다.
     await loadData()
   } catch (error: unknown) {
     showError(error)
@@ -349,6 +351,8 @@ async function loadData() {
 
     let result = await fetchShoppingPage(page.value)
 
+    // 삭제나 구매 상태 변경으로 현재 페이지가 사라지면 마지막 페이지를 다시 조회한다.
+    // 검색 결과가 0건일 때도 요청에 사용할 페이지 번호는 최소 1로 유지한다.
     const lastPage = Math.max(1, result.data.totalPages)
 
     if (page.value > lastPage) {
@@ -356,9 +360,9 @@ async function loadData() {
       result = await fetchShoppingPage(lastPage)
     }
 
-    shoppingItems.value = result.data.items
-    applyPage(result.data)
-    isDemo.value = result.isDemo
+    shoppingItems.value = result.data.items // 현재 페이지의 장보기 항목을 표에 표시한다.
+    applyPage(result.data) // 페이지 번호, 전체 건수, 전체 페이지 수 등을 갱신한다.
+    isDemo.value = result.isDemo // 체험 목록이면 안내 문구를 표시하고 변경 버튼을 비활성화한다.
   } catch (error: unknown) {
     showError(error)
   } finally {

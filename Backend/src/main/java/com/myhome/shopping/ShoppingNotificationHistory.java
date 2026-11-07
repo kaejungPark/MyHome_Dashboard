@@ -3,8 +3,10 @@ package com.myhome.shopping;
 import java.time.LocalDateTime;
 
 /**
- * 발송 가능 여부와 재시도 판단에 필요한 알림 이력 정보를 담는다.
- * updatedDt는 DB에 저장된 UTC 시각이다.
+ * 사용자 한 명의 알림 실행일에 해당하는 발송 이력 한 건을 담는다.
+ * 서비스는 이력 유무로 당일 발송 여부를 판단하고,
+ * 발송 후에는 이력 ID와 시도 횟수로 이번 처리의 성공·실패를 기록한다.
+ * updatedDt는 DB에 저장한 마지막 상태 변경 시각이며 UTC 기준이다.
  */
 public record ShoppingNotificationHistory(
         Long id,                  // 발송 이력 ID

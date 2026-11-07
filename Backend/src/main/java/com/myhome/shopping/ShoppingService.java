@@ -53,6 +53,8 @@ public class ShoppingService {
         // 나머지가 있으면 마지막 페이지를 하나 추가한다.
         long totalPages = PageUtils.calculateTotalPages(totalCount, size);
 
+        // 검색 결과가 없거나 요청한 페이지의 시작 위치가 전체 건수를 넘으면 빈 목록을 반환한다.
+        // 이때도 전체 건수와 전체 페이지 수는 화면에 전달한다.
         List<ShoppingResponse> items = offset >= totalCount
                 ? List.of()
                 : shoppingMapper.findPage(userId, searchName, isCompleted, searchDate, offset, size);
@@ -162,6 +164,8 @@ public class ShoppingService {
             );
         }
 
+        // 구매 완료를 누른 날을 한국 시간 기준 실제 구매일로 기록한다.
+        // 예를 들어 내일 살 예정이던 물품을 오늘 샀다면 예정일은 내일, 실제 구매일은 오늘이다.
         LocalDate completedDate = LocalDate.now(ZoneId.of("Asia/Seoul"));
 
         int updateRow = shoppingMapper.shoppingCompleted(userId, id, completedDate);
@@ -211,6 +215,8 @@ public class ShoppingService {
             );
         }
 
+        // 구매 완료 상태인 항목만 미구매로 되돌린다.
+        // 실제 구매일을 비우고 구매 예정일은 유지하므로, 조건이 맞으면 다시 알림 대상이 될 수 있다.
         int updateRow = shoppingMapper.shoppingCancel(userId, id);
 
         // 조회 이후 다른 요청이 먼저 완료 취소하거나 삭제한 경우   성공으로 처리하지 않는다.

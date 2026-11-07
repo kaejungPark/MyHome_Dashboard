@@ -13,9 +13,9 @@ import java.util.List;
 public interface ShoppingNotificationMapper {
 
     /**
-     * 활성 회원 중 이메일 인증을 완료하고 알림 수신에 동의한 회원을 대상으로,
-     * 구매 예정일이 오늘 또는 내일인 미구매 항목을 조회한다.
-     * 사용자별로 묶어 이메일을 발송한다.
+     * 이메일 인증을 마치고 알림 수신에 동의한 활성 회원의 장보기 항목을 조회한다.
+     * 구매 예정일이 오늘 또는 내일인 미구매 항목마다 한 행을 반환한다.
+     * 서비스는 같은 사용자의 행을 모아 이메일 한 통으로 발송한다.
      */
     @Select("""
        SELECT
@@ -90,9 +90,9 @@ public interface ShoppingNotificationMapper {
     );
 
     /**
-     * 조회했던 실패 이력을 재시도 상태로 변경한다.
-     * 상태와 시도 횟수가 그대로인 경우에만 갱신하여 동시 재시도를 막는다.
-     * 재시도 가능 시간과 최대 횟수는 Service에서 별도로 검증한다.
+     * 실패한 발송 이력을 다시 처리할 수 있도록 PROCESSING으로 변경하고 시도 횟수를 1 늘린다.
+     * 조회 당시의 시도 횟수와 현재 값이 일치하는 FAILED 이력만 변경한다.
+     * 현재 정기 발송에서는 이 메서드를 호출하지 않으므로 실패 건은 자동 재발송되지 않는다.
      */
     @Update("""
     UPDATE dbo.SHOPPING_NOTIFICATION_HISTORY
