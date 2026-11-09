@@ -16,8 +16,9 @@ public class StatisticsController {
     public StatisticsController(StatisticsService statisticsService ){ this.statisticsService = statisticsService; }
 
     /**
-     * 로그인한 사용자의 요청 월 통계를 조회한다.
-     * 사용자 ID는 인증 정보에서, 조회 월은 URL에서 가져온다.
+     * URL로 받은 월을 기준으로 로그인한 사용자의 지출 통계를 조회한다.
+     * 예를 들어 /api/statistics/2026-11을 요청하면 해당 사용자의 11월 통계를 반환한다.
+     * 사용자 ID는 로그인 정보에서 가져온다.
      */
     @GetMapping("/{month}")
     public ApiResponse<StatisticsResponse> getStatistics(

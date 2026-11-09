@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * StatisticsResponse — 전체 통계 응답
+ * 선택 월의 지출·예산 요약, 전월 대비 증감, 카테고리별 내역을 한 번의 응답으로 전달한다.
  * */
 public record StatisticsResponse (
     String month, // 조회 월

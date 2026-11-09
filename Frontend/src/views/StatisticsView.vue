@@ -42,8 +42,8 @@ const month = ref(currentMonth())
 function formatAmount(amount: number | null) {
   return amount === null ? '—' : amount.toLocaleString('ko-KR')
 }
-
-// 선택한 월의 지출·예산·카테고리별 통계와 전월 대비 증감 정보를 조회한다.
+// 선택한 월로 통계 API를 호출하고, 체험 모드에서는 같은 월의 샘플 통계를 사용한다.
+// 조회 결과와 체험 여부를 화면에 반영한다.
 async function findStatistics() {
   statistics.value = null
   isDemo.value = false
@@ -59,7 +59,8 @@ async function findStatistics() {
   isDemo.value = result.isDemo
 }
 
-// 최초 진입과 조회 버튼 클릭 시 통계를 조회한다.
+// 화면에 처음 들어오거나 조회 버튼을 누르면 이 함수부터 실행한다.
+// 중복 요청과 조회 월을 먼저 확인한 뒤 findStatistics()를 호출하고, 로딩과 오류 표시를 관리한다.
 async function loadStatistics() {
   // 조회 중에는 중복 요청을 막는다.
   if (loading.value) return
@@ -190,48 +191,47 @@ onMounted(loadStatistics)
           </article>
         </section>
 
+        <!-- 선택 월과 전월의 실제 지출 비교 -->
         <section class="card comparison-section" aria-labelledby="comparison-heading">
-          <!-- 선택 월과 전월의 실제 지출 비교 -->
-          <section class="card comparison-section" aria-labelledby="comparison-heading">
-            <div class="card-heading">
-              <div class="heading-title">
-                <ChartPie :size="20" aria-hidden="true" />
-                <h2 id="comparison-heading">전월 대비 지출</h2>
-              </div>
+          <div class="card-heading">
+            <div class="heading-title">
+              <ChartPie :size="20" aria-hidden="true" />
+              <h2 id="comparison-heading">전월 대비 지출</h2>
             </div>
+          </div>
 
-            <p>전월 지출: {{ formatAmount(statistics.previousMonthAmount) }}원</p>
+          <p>전월 지출: {{ formatAmount(statistics.previousMonthAmount) }}원</p>
 
-            <p
-              class="summary-value"
-              :class="{
-                'spending-up': statistics.changeAmount > 0,
-                'spending-down': statistics.changeAmount < 0,
-              }"
-            >
-              <template v-if="statistics.changeAmount === 0"> 전월과 동일 </template>
-              <template v-else>
-                {{ formatAmount(Math.abs(statistics.changeAmount)) }}원
-                {{ statistics.changeAmount > 0 ? '증가' : '감소' }}
-              </template>
-            </p>
+          <p
+            class="summary-value"
+            :class="{
+              'spending-up': statistics.changeAmount > 0,
+              'spending-down': statistics.changeAmount < 0,
+            }"
+          >
+            <template v-if="statistics.changeAmount === 0"> 전월과 동일 </template>
+            <template v-else>
+              {{ formatAmount(Math.abs(statistics.changeAmount)) }}원
+              {{ statistics.changeAmount > 0 ? '증가' : '감소' }}
+            </template>
+          </p>
 
-            <p class="summary-note">
-              <template v-if="statistics.changeRate === null">
-                전월 지출이 없어 증감률을 계산할 수 없습니다.
-              </template>
-              <template v-else-if="statistics.changeAmount === 0"> 증감률 0% </template>
-              <template v-else>
-                전월 대비 {{ Math.abs(statistics.changeRate).toFixed(2) }}%
-                {{ statistics.changeAmount > 0 ? '증가' : '감소' }}
-              </template>
-            </p>
+          <p class="summary-note">
+            <!-- 전월 지출이 0원이면 금액 차이는 표시할 수 있지만 증감률은 계산할 수 없다. -->
+            <template v-if="statistics.changeRate === null">
+              전월 지출이 없어 증감률을 계산할 수 없습니다.
+            </template>
+            <template v-else-if="statistics.changeAmount === 0"> 증감률 0% </template>
+            <template v-else>
+              전월 대비 {{ Math.abs(statistics.changeRate).toFixed(2) }}%
+              {{ statistics.changeAmount > 0 ? '증가' : '감소' }}
+            </template>
+          </p>
 
-            <p class="summary-note">
-              선택 월과 전월의 월별 누적 지출을 비교합니다. 진행 중인 월은 현재까지 등록된 지출
-              기준입니다.
-            </p>
-          </section>
+          <p class="summary-note">
+            선택 월과 전월의 월별 누적 지출을 비교합니다. 진행 중인 월은 현재까지 등록된 지출
+            기준입니다.
+          </p>
         </section>
       </div>
 

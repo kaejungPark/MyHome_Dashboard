@@ -3,7 +3,7 @@ package com.myhome.statistics;
 import java.math.BigDecimal;
 
 /**
- * CategoryStatisticsResponse — 화면에 보낼 카테고리별 통계
+ * 통계 화면의 카테고리 한 행에 표시할 이름, 지출 합계, 총지출 대비 비율을 담는다.
  * */
 public record CategoryStatisticsResponse(
         Long categoryId,       // 카테고리 ID

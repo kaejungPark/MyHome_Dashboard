@@ -45,7 +45,7 @@ public class StatisticsService {
         // 현재 사용자의 조회 월 예산을 조회한다. 미등록이면 null을 반환한다.
         BigDecimal budget = budgetMapper.findAmount(userId, monthStart);
 
-        // 전체 지출 합계(totalAmount) 계산
+        // 카테고리별 금액을 모두 더해 선택 월의 총지출을 구한다. 지출 내역이 없으면 합계는 0원이다.
         BigDecimal totalAmount = categoryTotals.stream().map(CategoryTotal::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 전월 1일부터 선택 월 1일 직전까지의 지출을 조회해 합산한다.
@@ -69,7 +69,7 @@ public class StatisticsService {
                 .multiply(new BigDecimal("100"))
                 .divide(previousMonthAmount, 2, RoundingMode.HALF_UP);
 
-        // 카테고리별 비율(percentage)을 갖는 CategoryStatisticsResponse 리스트 생성
+        // 각 카테고리 금액이 선택 월 총지출에서 차지하는 비율을 계산한다. 예를 들어 총지출 10만 원 중 식비가 3만 원이면 30%다.
         List<CategoryStatisticsResponse> responses = categoryTotals.stream().map(
                 category -> {
                     BigDecimal percentage = BigDecimal.ZERO;
@@ -97,7 +97,7 @@ public class StatisticsService {
                 ? budget.subtract(totalAmount)
                 : null;
 
-        // 예산이 없거나 0원이면 사용률을 계산하지 않는다.
+        // 예산 사용률은 총지출을 월 예산으로 나눈 비율이다. 예산이 없거나 0원이면 화면에서 별도 안내할 수 있도록 null을 유지한다.
         BigDecimal usageRate = null;
         if (configured && budget.compareTo(BigDecimal.ZERO) > 0) {
             usageRate = totalAmount
