@@ -96,7 +96,9 @@ public class CommentController {
             @PathVariable("communityId") Long communityId,
             @Valid @RequestBody CommentCreateRequest request
     ) {
-        // 작성자 ID는 서버에서 인증한 로그인 정보만 사용한다.
+        // 작성자 ID는 로그인 정보에서, 게시글 ID는 URL에서 가져온다.
+        // 요청 본문에는 댓글 내용과 parentId가 들어온다.
+        // 화면은 일반 댓글이면 parentId를 null로, 답글이면 선택한 댓글 ID로 보낸다.
         commentService.createComment(
                 loginUser.getId(),
                 communityId,

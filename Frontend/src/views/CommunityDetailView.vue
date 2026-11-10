@@ -288,9 +288,10 @@ onMounted(loadData)
       </footer>
     </article>
     <!--
-      게시글을 정상 조회한 경우에만 댓글을 표시한다.
-      게시글 ID가 달라지면 key가 바뀌어 댓글 상태도 새로 생성된다.
-      세션 만료 시 부모 화면의 로그인 사용자 정보를 초기화한다.
+      게시글 상세 조회가 성공하면 details.id를 댓글 영역에 전달한다.
+      community-id는 어느 게시글의 댓글을 조회할지 정하고,
+      key는 게시글이 바뀌었을 때 이전 글의 댓글 목록과 작성 중인 답글을 초기화한다.
+      댓글 영역에서 세션 만료를 알리면 상세 화면의 로그인 사용자 정보도 비운다.
     -->
     <CommunityComments
       v-if="details && !loading && !errorMessage"

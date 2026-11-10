@@ -415,7 +415,8 @@ function formatDateTime(value: string): string {
   }).format(date)
 }
 
-/** 부모 화면에서 게시글을 정상 조회한 후 컴포넌트가 생성된다. */
+// 상세 화면에서 받은 communityId로 일반 댓글의 첫 페이지를 조회한다.
+// 대댓글은 사용자가 해당 댓글의 답글 영역을 처음 펼칠 때 별도로 조회한다.
 onMounted(() => loadComments(1))
 </script>
 
