@@ -130,13 +130,9 @@ async function submitLogin() {
     // URL·localStorage·sessionStorage 등에 저장하지 않는다.
     password.value = ''
 
-    /*
-     * 앱을 다시 열어 App.vue도 새 세션의 로그인 정보를 조회하게 한다.
-     * replace를 사용하여 뒤로 가기로 로그인 제출 화면에 돌아가지 않게 한다.
-     *
-     * 화면 이동은 사용자 안내용이며,
-     * 실제 API 접근 제한은 백엔드 PasswordStateFilter가 담당한다.
-     */
+    // 로그인 응답의 passwordChangeRequired가 true이면 새 비밀번호 설정 화면으로,
+    // false이면 대시보드로 이동한다. 임시 로그인 사용자의 API 접근 범위는 서버에서 검사한다.
+    // 페이지를 다시 열어 App.vue도 새 로그인 세션의 사용자 정보를 읽도록 한다.
     const targetPath = result.data.passwordChangeRequired ? '/change-password' : '/'
 
     window.location.replace(targetPath)

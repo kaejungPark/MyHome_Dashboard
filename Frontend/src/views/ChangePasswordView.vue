@@ -96,7 +96,8 @@ async function loadLoginState() {
   errorMessage.value = ''
 
   try {
-    // 체험 데이터가 아닌 실제 서버 세션 정보를 조회한다.
+    // 주소를 직접 열거나 새로고침한 경우에도 현재 세션을 기준으로 화면을 결정한다.
+    // 일반 로그인은 회원 정보 화면으로 보내고, 임시 로그인 권한을 확인하면 변경 폼을 표시한다.
     const user = await request<LoginUser>('/api/auth/me')
 
     if (!user || typeof user.passwordChangeRequired !== 'boolean') {
@@ -208,13 +209,8 @@ async function changePassword() {
       }),
     })
 
-    /*
-     * 이 API의 정상 응답은 data가 null이다.
-     * 반환값의 존재 여부로 성공을 판단하지 않는다.
-     *
-     * 예외 없이 완료되면 서버에서 비밀번호 저장,
-     * 임시 비밀번호 사용 처리, 현재 세션 종료가 완료된 상태다.
-     */
+    // 비밀번호 변경 API는 성공 시 data가 null이다. 요청이 예외 없이 끝나면 변경이 완료된 것이다.
+    // 서버가 임시 로그인 세션을 종료했으므로 입력값을 비우고 새 비밀번호로 다시 로그인하도록 안내한다.
     passwordChanged.value = true
     clearPasswordForm()
 

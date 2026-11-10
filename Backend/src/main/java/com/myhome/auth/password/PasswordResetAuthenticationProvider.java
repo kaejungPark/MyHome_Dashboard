@@ -83,9 +83,9 @@ public class PasswordResetAuthenticationProvider
 
         } catch (BadCredentialsException exception) {
             /*
-             * 일반 비밀번호가 일치하지 않을 때만 임시 비밀번호를 검사한다.
-             * DisabledException 등 계정 상태 예외는 잡지 않으므로
-             * 정지된 계정이 임시 비밀번호로 로그인할 수 없다.
+             * 입력한 값으로 일반 로그인을 먼저 시도한다.
+             * 일반 인증이 BadCredentialsException으로 실패하면 같은 값으로 임시 비밀번호를 확인한다.
+             * 계정 비활성화 같은 예외는 이 분기에 들어오지 않으므로 로그인 실패로 처리된다.
              */
             LoginUser loginUser =
                     resetService.authenticateTemporary(email, password);

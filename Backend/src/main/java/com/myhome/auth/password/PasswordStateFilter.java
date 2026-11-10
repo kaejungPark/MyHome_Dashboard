@@ -73,6 +73,8 @@ public class PasswordStateFilter extends OncePerRequestFilter {
             invalid = !resetService.isSessionValid(user, current);
         }
 
+        // 계정 상태나 인증 버전이 바뀌었거나 임시 비밀번호 발급 이력이 만료되면
+        // 현재 세션을 종료하고 401을 반환해 다시 로그인하도록 한다.
         if (invalid) {
             // 더 이상 사용할 수 없는 세션과 현재 인증 정보를 제거한다.
             new SecurityContextLogoutHandler()
@@ -86,7 +88,8 @@ public class PasswordStateFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 임시 로그인 상태에서 일반 기능 API를 직접 호출하는 것도 차단한다.
+        // 유효한 임시 세션에서는 로그인 상태 조회, CSRF 토큰 조회, 비밀번호 변경, 로그아웃만 허용한다.
+        // 그 밖의 요청은 세션을 유지한 채 403으로 거절한다.
         if (user.isPasswordChangeRequired() && !allowed(request)) {
             writeError(
                     response,

@@ -23,13 +23,13 @@ public class PasswordResetController {
     /**
      * POST /api/auth/password-reset: 임시 비밀번호 발송 요청.
      *
-     * @Valid로 필수값·이메일 형식·길이를 검사한다.
+     * 검증을 통과한 요청은 PasswordResetService.send()에 전달해 발급과 메일 발송을 처리한다.
      * 로그인은 필요하지 않지만 기존 CSRF 검사는 유지한다.
      *
      * 가입 여부, 발급 제한, 메일 발송 실패 여부에 따라
      * 회원 존재가 드러나지 않도록 동일한 안내를 반환한다.
      *
-     * 성공 응답은 실제 수신함 도착을 보장하지 않는다.
+     * 응답의 data에는 화면에 표시할 요청 안내 문구가 담긴다. 실제 메일 도착 여부는 수신함에서 확인한다.
      */
     @PostMapping
     public ApiResponse<String> send(
