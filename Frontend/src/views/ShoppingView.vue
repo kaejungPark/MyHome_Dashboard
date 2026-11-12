@@ -90,6 +90,26 @@ function startEdit(item: ShoppingItem) {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+// 구매 완료한 항목의 물품명·수량·단위를 새 등록 폼에 채운다.
+// 실제 저장은 사용자가 등록 버튼을 눌렀을 때 처리한다.
+function prepareRepurchase(item: ShoppingItem) {
+  if (!item.isCompleted || editingId.value !== null) return
+  if (loading.value || saving.value || !canModify()) return
+
+  // 수정 대상 ID를 해제하고 구매 예정일과 메모를 초기화한다.
+  resetForm()
+
+  Object.assign(form, {
+    name: item.name,
+    quantity: item.quantity,
+    unit: item.unit,
+  })
+
+  errorMessage.value = ''
+  notice.value = ''
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 /**
  * 입력한 검색 조건을 확정하고 첫 페이지부터 조회한다.
  * 수정 중이라면 사용자 확인 후 수정 폼을 초기화한다.
@@ -599,6 +619,16 @@ onMounted(loadData)
                     @click="cancelCompletion(item)"
                   >
                     완료 취소
+                  </button>
+
+                  <button
+                    v-if="item.isCompleted"
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="saving || loading || isDemo || editingId !== null"
+                    @click="prepareRepurchase(item)"
+                  >
+                    다시 담기
                   </button>
 
                   <button
