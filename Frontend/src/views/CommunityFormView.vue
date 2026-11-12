@@ -32,7 +32,8 @@ const ready = ref(false)
 const loginRequired = ref(false)
 const errorMessage = ref('')
 
-// 로그인 확인 후 등록 또는 수정 폼을 준비한다.
+// 로그인 상태를 확인한 뒤 URL에 게시글 ID가 없으면 새 글을 작성할 빈 폼을 준비한다.
+// ID가 있으면 수정할 글의 제목과 본문을 불러와 같은 폼에 채운다.
 async function loadForm(rawId: unknown) {
   loading.value = true
   ready.value = false
@@ -90,7 +91,9 @@ async function loadForm(rawId: unknown) {
   }
 }
 
-// 등록은 POST, 수정은 PUT으로 제목과 본문을 전달한다.
+// 입력하는 값은 두 경우 모두 제목과 본문
+// 새 글은 POST로 등록하고 목록으로 돌아감
+// 수정은 게시글 ID를 포함한 PUT 요청을 보내고 해당 글의 상세 화면으로 돌아감
 async function saveCommunity() {
   if (loading.value || saving.value || !ready.value) return
 

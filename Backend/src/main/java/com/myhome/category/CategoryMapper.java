@@ -8,7 +8,8 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface CategoryMapper {
 
-    // 표시 순서대로 카테고리 목록을 조회한다.
+    // 카테고리를 화면 표시 순서(SORT_ORDER)대로 조회한다.
+    // 표시 순서가 같으면 ID가 작은 항목부터 보여준다.
     @Select("""
             SELECT
                 ID AS id,
@@ -19,7 +20,8 @@ public interface CategoryMapper {
             """)
     List<CategoryResponse> findAll();
 
-    // 카테고리가 존재하면 1, 없으면 0을 반환한다.
+    // 생활비 등록·수정 시 화면에서 보낸 카테고리 ID가 DB에 있는지 확인한다.
+    // 조회 결과가 0이면 서비스에서 저장 요청을 거절한다.
     @Select("""
             SELECT COUNT(*)
             FROM dbo.EXPENSE_CATEGORY
